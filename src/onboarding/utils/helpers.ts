@@ -165,7 +165,10 @@ export async function showExpertiseSelection(ctx: DatabaseContext) {
   ]
 
   await ctx.replyWithPhoto(getImageUrl('/thumbnails/expertise.png'), {
-    caption: 'Select your expertise areas:',
+    caption: `I am an expert on _Remind People to Earn_, so some people call me Bob the Honkor 📣.
+
+How about you?
+_Select all options that apply to you_`,
     reply_markup: {
       inline_keyboard: inlineKeyboard,
     },
@@ -214,7 +217,7 @@ export async function showUSDRangeSelection(ctx: DatabaseContext) {
   ])
 
   await ctx.replyWithPhoto(getImageUrl('/thumbnails/range.png'), {
-    caption: 'Select your preferred USD range for bounties and projects:',
+    caption: `Choose your best title, I will filter and notify you when there's a listing that matches your range.`,
     reply_markup: {
       inline_keyboard: inlineKeyboard,
     },
@@ -282,7 +285,10 @@ export async function updateExpertiseMessage(ctx: DatabaseContext) {
 
   try {
     await ctx.editMessageCaption({
-      caption: 'Select your expertise areas:',
+      caption: `I am an expert on _Remind People to Earn_, so some people call me Bob the Honkor 📣.
+
+How about you?
+_Select all options that apply to you_`,
       reply_markup: {
         inline_keyboard: inlineKeyboard,
       },

@@ -10,7 +10,7 @@ Encouraging and reminding builders not just to earn, but also to keep building c
 Bob is under training program, he will be ready to onboard on couple of days.
 
 <div align="center">
-<a href="https://www.youtube.com/watch?v=dQw4w9WgXcQ" target="_blank" style="text-decoration: underline;">[Video Preview]</a>
+<a href="https://youtube.com/shorts/rKS3iPoUWqI" target="_blank" style="text-decoration: underline;">[Video Preview]</a>
 <a href="https://t.me/SuperteamEarnBot" target="_blank" style="text-decoration: underline;">[Telegram Bot]</a>
 
 </div>
