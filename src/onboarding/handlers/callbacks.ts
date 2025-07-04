@@ -6,6 +6,10 @@ import {
   updateListingMessage,
   updateSkillBasedOnExpertise,
   updateSkillsMessage,
+  showExpertiseSelection,
+  showSkillsSelection,
+  showListingSelection,
+  showUSDRangeSelection,
 } from '@/onboarding/utils/helpers'
 import { getImageUrl } from '@/lib/url'
 
@@ -252,19 +256,27 @@ async function handleRangeSelection(ctx: DatabaseContext, data: string) {
 async function handleProfileUpdate(ctx: DatabaseContext, data: string) {
   const updateType = data.replace('update_', '')
 
+  // Ensure we're not in onboarding mode for profile updates
+  ctx.session.isOnboarding = false
+
   // Handle profile updates based on the type
   switch (updateType) {
     case 'expertise':
-      // Add logic to update expertise
+      await showExpertiseSelection(ctx)
       break
     case 'skills':
-      // Add logic to update skills
+      // Check if user has expertise selected before allowing skills update
+      if (!ctx.userData.expertise || ctx.userData.expertise.length === 0) {
+        await ctx.reply('Please select your expertise first before updating skills.')
+        return
+      }
+      await showSkillsSelection(ctx)
       break
     case 'listings':
-      // Add logic to update listings
+      await showListingSelection(ctx)
       break
     case 'range':
-      // Add logic to update range
+      await showUSDRangeSelection(ctx)
       break
     default:
       await ctx.reply('Unknown update type')

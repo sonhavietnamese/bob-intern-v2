@@ -1,5 +1,5 @@
 import { db } from './connection'
-import type { User } from '@prisma/client'
+import type { User, Listing } from '@prisma/client'
 
 export class DatabaseService {
   // User operations
@@ -200,7 +200,209 @@ export class DatabaseService {
       return null
     }
   }
+
+  // Listing operations
+  async createOrUpdateListing(listingData: {
+    id: string
+    title: string
+    slug: string
+    deadline: string
+    token: string
+    usdValue: number
+    type: string
+    compensationType: string
+    sponsor: object
+    skills: Array<{ skills: string; subskills: string[] }>
+    mappedSkill?: string[]
+  }): Promise<any | null> {
+    try {
+      const result = await db.listing.upsert({
+        where: { id: listingData.id },
+        update: {
+          title: listingData.title,
+          slug: listingData.slug,
+          deadline: new Date(listingData.deadline),
+          token: listingData.token,
+          usdValue: listingData.usdValue,
+          type: listingData.type,
+          compensationType: listingData.compensationType,
+          sponsor: JSON.stringify(listingData.sponsor),
+          skills: JSON.stringify(listingData.skills),
+          mappedSkill: listingData.mappedSkill ? JSON.stringify(listingData.mappedSkill) : null,
+          lastFetched: new Date(),
+        },
+        create: {
+          id: listingData.id,
+          title: listingData.title,
+          slug: listingData.slug,
+          deadline: new Date(listingData.deadline),
+          token: listingData.token,
+          usdValue: listingData.usdValue,
+          type: listingData.type,
+          compensationType: listingData.compensationType,
+          sponsor: JSON.stringify(listingData.sponsor),
+          skills: JSON.stringify(listingData.skills),
+          mappedSkill: listingData.mappedSkill ? JSON.stringify(listingData.mappedSkill) : null,
+        },
+      })
+      return result
+    } catch (error) {
+      console.error('Error creating/updating listing:', error)
+      return null
+    }
+  }
+
+  async getListingById(id: string): Promise<any | null> {
+    try {
+      const result = await db.listing.findUnique({
+        where: { id },
+      })
+      return result
+    } catch (error) {
+      console.error('Error fetching listing by ID:', error)
+      return null
+    }
+  }
+
+  async getListingBySlug(slug: string): Promise<any | null> {
+    try {
+      const result = await db.listing.findUnique({
+        where: { slug },
+      })
+      return result
+    } catch (error) {
+      console.error('Error fetching listing by slug:', error)
+      return null
+    }
+  }
+
+  async getActiveListings(): Promise<any[]> {
+    try {
+      const result = await db.listing.findMany({
+        where: { isActive: true },
+        orderBy: { createdAt: 'desc' },
+      })
+      return result
+    } catch (error) {
+      console.error('Error fetching active listings:', error)
+      return []
+    }
+  }
+
+  async getListingsByType(type: string): Promise<any[]> {
+    try {
+      const result = await db.listing.findMany({
+        where: {
+          type,
+          isActive: true,
+        },
+        orderBy: { createdAt: 'desc' },
+      })
+      return result
+    } catch (error) {
+      console.error('Error fetching listings by type:', error)
+      return []
+    }
+  }
+
+  async getRecentListings(limit: number = 10): Promise<Listing[]> {
+    try {
+      const result = await db.listing.findMany({
+        where: { isActive: true },
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+      })
+      return result
+    } catch (error) {
+      console.error('Error fetching recent listings:', error)
+      return []
+    }
+  }
+
+  async markListingInactive(id: string): Promise<boolean> {
+    try {
+      await db.listing.update({
+        where: { id },
+        data: { isActive: false },
+      })
+      return true
+    } catch (error) {
+      console.error('Error marking listing as inactive:', error)
+      return false
+    }
+  }
+
+  async getListingStats(): Promise<{
+    totalListings: number
+    activeListings: number
+    bounties: number
+    projects: number
+    averageUsdValue: number
+  }> {
+    try {
+      const [totalListings, activeListings, bounties, projects, averageValue] = await Promise.all([
+        db.listing.count(),
+        db.listing.count({ where: { isActive: true } }),
+        db.listing.count({ where: { type: 'bounty', isActive: true } }),
+        db.listing.count({ where: { type: 'project', isActive: true } }),
+        db.listing.aggregate({
+          where: { isActive: true },
+          _avg: { usdValue: true },
+        }),
+      ])
+
+      return {
+        totalListings,
+        activeListings,
+        bounties,
+        projects,
+        averageUsdValue: Math.round(averageValue._avg.usdValue || 0),
+      }
+    } catch (error) {
+      console.error('Error fetching listing stats:', error)
+      return {
+        totalListings: 0,
+        activeListings: 0,
+        bounties: 0,
+        projects: 0,
+        averageUsdValue: 0,
+      }
+    }
+  }
+
+  async bulkCreateOrUpdateListings(
+    listingsData: Array<{
+      id: string
+      title: string
+      slug: string
+      deadline: string
+      token: string
+      usdValue: number
+      type: string
+      compensationType: string
+      sponsor: object
+      skills: Array<{ skills: string; subskills: string[] }>
+    }>,
+  ): Promise<number> {
+    try {
+      let successCount = 0
+
+      for (const listingData of listingsData) {
+        const result = await this.createOrUpdateListing(listingData)
+        if (result) {
+          successCount++
+        }
+      }
+
+      return successCount
+    } catch (error) {
+      console.error('Error in bulk create/update listings:', error)
+      return 0
+    }
+  }
 }
 
 // Export singleton instance
 export const dbService = new DatabaseService()
+
+// [{"skills":"Content","subskills":["Writing"]}]

@@ -3,6 +3,7 @@ import fs from 'fs-extra'
 import nodeHtmlToImage from 'node-html-to-image'
 import { getBaseUrl } from './url'
 import { pantonRust, namecardDataURI, listingDataURI, lfe, tagBountyDataURI, bobHeadDataURI } from './preload'
+import { APP_CONFIG, IS_PRODUCTION } from '@/config'
 
 export const leftAlignTextTelegram = (text: string, maxLength: number) => {
   const textLength = text.length
@@ -210,8 +211,7 @@ export const generateNameCard = async (name: string, userId: string) => {
 
   try {
     // Generate unique filename
-    const timestamp = Date.now()
-    const filename = `${userId}-${timestamp}.png`
+    const filename = `${userId}.png`
     const filePath = path.join(process.cwd(), 'public', 'images', 'namecards', filename)
 
     // Ensure directory exists
@@ -223,6 +223,7 @@ export const generateNameCard = async (name: string, userId: string) => {
       content: {
         font: pantonRust,
       },
+      puppeteerArgs: IS_PRODUCTION ? APP_CONFIG.PUPPETEER_ARGS : undefined,
 
       // puppeteerArgs: {
       //   executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/google-chrome-stable',

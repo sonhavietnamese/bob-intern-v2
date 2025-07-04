@@ -31,4 +31,31 @@ model User {
   updatedAt   DateTime  @updatedAt @map("updated_at")
 
   @@map("users")
+}
+
+model Listing {
+  id                String   @id // Using the original listing ID from API
+  title             String
+  slug              String   @unique
+  deadline          DateTime
+  token             String
+  usdValue          Int      @map("usd_value")
+  type              String   // 'bounty' or 'project'
+  compensationType  String   @map("compensation_type") // 'fixed' or 'range'
+  
+  // Sponsor information (stored as JSON for simplicity)
+  sponsor           String   // JSON object with sponsor details
+  
+  // Skills (stored as JSON array)
+  skills            String   // JSON array of skills with subskills
+  mappedSkill       String?  @map("mapped_skill") // JSON array of mapped skills using SUPERTEAM_EARN_SKILL_MAPPING
+  
+  // Metadata
+  isActive          Boolean  @default(true) @map("is_active")
+  lastFetched       DateTime @default(now()) @map("last_fetched")
+  
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@map("listings")
 } 

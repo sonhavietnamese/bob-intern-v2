@@ -1,19 +1,20 @@
 import 'dotenv/config'
 
-import { Bot, webhookCallback } from 'grammy'
-import { databaseCommands, databaseComposer } from './onboarding/composer'
-import type { DatabaseContext } from './onboarding/types'
-import { createMessageQueue } from './lib/message-queue'
-import { preload } from './lib/preload'
-import { getBaseUrl, getImageUrl, setServerUrl } from './lib/url'
-import { generateImage, generateListingThumbnail } from './lib/utils'
 import fastifyStatic from '@fastify/static'
 import ngrok from '@ngrok/ngrok'
 import fastify from 'fastify'
+import { Bot, webhookCallback } from 'grammy'
 import * as cron from 'node-cron'
 import path from 'path'
 import { initDatabase } from './database/connection'
 import { dbService } from './database/services'
+import { createMessageQueue } from './lib/message-queue'
+import { preload } from './lib/preload'
+import { getBaseUrl, setServerUrl } from './lib/url'
+import { generateImage } from './lib/utils'
+import { databaseCommands, databaseComposer } from './onboarding/composer'
+import type { DatabaseContext } from './onboarding/types'
+import { CronjobService } from './services/cronjob'
 
 export const {
   TELEGRAM_BOT_TOKEN: token,
@@ -46,6 +47,9 @@ export const bot = new Bot<DatabaseContext>(token)
 
 // Create message queue instance
 export const messageQueue = createMessageQueue(bot)
+
+// Create cronjob service instance
+export const cronjobService = new CronjobService(bot, messageQueue)
 
 bot.api.setMyCommands([...databaseCommands, { command: 'help', description: 'Show help text' }])
 
@@ -86,7 +90,7 @@ server.get('/health', (request, reply) => {
 
 server.post('/api/send-test-message', async (request, reply) => {
   try {
-    await sendTestMessageToAllUsers()
+    await cronjobService.sendTestMessageToAllUsers()
     reply.send({
       success: true,
       message: 'Test message sent to all users',
@@ -137,73 +141,73 @@ server.post('/api/clear-queue', async (request, reply) => {
   }
 })
 
+server.post('/api/scan-listings', async (request, reply) => {
+  try {
+    await cronjobService.scanBountiesAndProjects()
+    reply.send({
+      success: true,
+      message: 'Bounties and projects scanned successfully',
+    })
+  } catch (error) {
+    console.error('Error scanning listings:', error)
+    reply.status(500).send({
+      success: false,
+      error: 'Failed to scan listings',
+    })
+  }
+})
+
+server.get('/api/listings-stats', async (request, reply) => {
+  try {
+    const stats = await dbService.getListingStats()
+    reply.send({
+      success: true,
+      data: stats,
+    })
+  } catch (error) {
+    console.error('Error getting listings stats:', error)
+    reply.status(500).send({
+      success: false,
+      error: 'Failed to get listings stats',
+    })
+  }
+})
+
+server.get('/api/listings/recent', async (request, reply) => {
+  try {
+    const limit = parseInt((request.query as any)?.limit) || 5
+    const listings = await dbService.getRecentListings(limit)
+
+    const formattedListings = listings.map((listing) => ({
+      id: listing.id,
+      title: listing.title,
+      slug: listing.slug,
+      type: listing.type,
+      usdValue: listing.usdValue,
+      deadline: listing.deadline,
+      skills: listing.skills ? JSON.parse(listing.skills) : [],
+      mappedSkill: listing.mappedSkill ? JSON.parse(listing.mappedSkill) : [],
+      sponsor: listing.sponsor ? JSON.parse(listing.sponsor) : {},
+    }))
+
+    reply.send({
+      success: true,
+      data: formattedListings,
+    })
+  } catch (error) {
+    console.error('Error getting recent listings:', error)
+    reply.status(500).send({
+      success: false,
+      error: 'Failed to get recent listings',
+    })
+  }
+})
+
 server.post(`/${token}`, webhookCallback(bot, 'fastify', { secretToken: secretToken }))
 
 server.setErrorHandler(async (error) => {
   console.error(error)
 })
-
-// Cronjob function to send test message to all users
-async function sendTestMessageToAllUsers() {
-  try {
-    console.log('🔄 Starting cronjob: sending test message to all users...')
-
-    // Get all users from database
-    const users = await dbService.getAllUsers()
-
-    if (users.length === 0) {
-      console.log('📭 No users found in database')
-      return
-    }
-
-    console.log(`📨 Found ${users.length} users, adding to message queue...`)
-
-    // Generate thumbnail for the test message
-    const imageUrl = await generateListingThumbnail('Build your App with AI on Solana: AImpact Beta Challenge')
-
-    // Prepare message data
-    const messageOptions = {
-      caption: `**Kumeka Team** is sponsoring this listing!
-
-Build no-code Solana apps with AImpact for a chance to win up to $2000 USDC and shape the future of AI-powered development.`,
-      parse_mode: 'Markdown' as const,
-      reply_markup: {
-        inline_keyboard: [
-          [
-            {
-              text: 'Remind me every 12 hours',
-              callback_data: 'remind_me',
-            },
-            {
-              text: 'Join',
-              url: 'https://earn.superteam.fun/listing/aimpact-beta-challenge/?utm_source=telegrambot',
-            },
-          ],
-        ],
-      },
-    }
-
-    // Add all messages to the queue
-    const queuedMessages = users.map((user) => ({
-      userId: user.id.toString(),
-      telegramId: user.telegramId,
-      messageData: {
-        type: 'photo' as const,
-        content: getImageUrl(imageUrl),
-        options: messageOptions,
-      },
-      maxRetries: 3,
-      scheduledAt: new Date(), // Send immediately
-    }))
-
-    messageQueue.addBulkMessages(queuedMessages)
-
-    const queueStatus = messageQueue.getQueueStatus()
-    console.log(`✅ Added ${users.length} messages to queue. Queue size: ${queueStatus.queueSize}`)
-  } catch (error) {
-    console.error('❌ Cronjob error:', error)
-  }
-}
 
 server.listen({ port: +PORT, host: '0.0.0.0' }, async (error) => {
   if (error) {
@@ -247,12 +251,12 @@ server.listen({ port: +PORT, host: '0.0.0.0' }, async (error) => {
 
   await setupWebhookWithRetry(webhookUrl, secretToken)
 
-  // Set up cronjob to send test message every 5 minutes
-  cron.schedule('*/5 * * * *', sendTestMessageToAllUsers, {
+  // Set up cronjob to scan bounties and projects every 5 minutes
+  cron.schedule('*/2 * * * *', () => cronjobService.scanBountiesAndProjects(), {
     timezone: 'UTC',
   })
 
-  console.log('⏰ Cronjob scheduled: Test message will be sent to all users every 5 minutes')
+  console.log('⏰ Cronjob scheduled: Bounties and projects will be scanned every 5 minutes')
 })
 
 async function setupWebhookWithRetry(webhookUrl: string, secretToken: string, maxRetries = 3, delayMs = 10000) {

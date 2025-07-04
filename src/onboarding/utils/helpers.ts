@@ -20,6 +20,10 @@ export function getMissingOnboardingSteps(ctx: DatabaseContext): string[] {
     missing.push('expertise')
   }
 
+  if (!ctx.userData.skills || ctx.userData.skills.length === 0) {
+    missing.push('skills')
+  }
+
   if (!ctx.userData.listings || ctx.userData.listings.length === 0) {
     missing.push('listing')
   }
@@ -74,6 +78,9 @@ async function proceedToStep(ctx: DatabaseContext, step: string) {
       break
     case 'expertise':
       await showExpertiseSelection(ctx)
+      break
+    case 'skills':
+      await showSkillsSelection(ctx)
       break
     case 'listing':
       await showListingSelection(ctx)
@@ -196,6 +203,48 @@ export async function showUSDRangeSelection(ctx: DatabaseContext) {
 
   await ctx.replyWithPhoto(getImageUrl('/thumbnails/range.png'), {
     caption: 'Select your preferred USD range for bounties and projects:',
+    reply_markup: {
+      inline_keyboard: inlineKeyboard,
+    },
+  })
+}
+
+// Helper function to show skills selection
+export async function showSkillsSelection(ctx: DatabaseContext) {
+  const userExpertise = ctx.userData.expertise || []
+  const userSkills = ctx.userData.skills || []
+
+  // Get all skills from selected expertise areas
+  const allAvailableSkills: string[] = []
+  userExpertise.forEach((expertise) => {
+    const skillsForExpertise = SKILLS[expertise as keyof typeof SKILLS]
+    if (skillsForExpertise) {
+      allAvailableSkills.push(...skillsForExpertise)
+    }
+  })
+
+  // Remove duplicates
+  const uniqueSkills = [...new Set(allAvailableSkills)]
+
+  if (uniqueSkills.length === 0) {
+    await ctx.reply('No skills available for your selected expertise areas.')
+    return
+  }
+
+  const inlineKeyboard = [
+    ...uniqueSkills.map((skill) => {
+      const isSelected = userSkills.includes(skill)
+      const checkbox = isSelected ? '✅' : '☐'
+      return [
+        { text: skill, callback_data: `toggle_skill_${skill}` },
+        { text: checkbox, callback_data: `toggle_skill_${skill}` },
+      ]
+    }),
+    [{ text: 'Done', callback_data: 'skills_done' }],
+  ]
+
+  await ctx.replyWithPhoto('https://bob-intern-cdn.vercel.app/skill.png', {
+    caption: 'Select your specific skills',
     reply_markup: {
       inline_keyboard: inlineKeyboard,
     },

@@ -13,25 +13,25 @@ export default async function databaseProfile(ctx: CommandContext<DatabaseContex
     return
   }
 
-  let profileText = `👤 **${user.userName}**\n\n`
+  let profileText = `👤 <b>${user.userName}</b>\n\n`
 
   if (expertise && expertise.length > 0) {
-    profileText += `🎯 **Expertise**: ${expertise.join(', ')}\n`
+    profileText += `🎯 <b>Expertise</b>: ${expertise.join(', ')}\n`
   }
 
   if (skills && skills.length > 0) {
-    profileText += `🛠️ **Skills**: ${skills.join(', ')}\n`
+    profileText += `🛠️ <b>Skills</b>: ${skills.join(', ')}\n`
   }
 
   if (listings && listings.length > 0) {
-    profileText += `📋 **Interested in**: ${listings.join(', ')}\n`
+    profileText += `📋 <b>Interested in</b>: ${listings.join(', ')}\n`
   }
 
   if (priceRange) {
-    profileText += `💰 **Price Range**: ${priceRange.rangeLabel} ($${priceRange.minAmount} - $${priceRange.maxAmount})\n`
+    profileText += `💰 <b>Price Range</b>: ${priceRange.rangeLabel} ($${priceRange.minAmount} - $${priceRange.maxAmount})\n`
   }
 
-  profileText += `\n⏰ **Joined**: ${user.createdAt.toLocaleDateString()}`
+  profileText += `\n⏰ <b>Joined</b>: ${user.createdAt.toLocaleDateString()}`
 
   // Show update buttons
   const inlineKeyboard = [
@@ -48,7 +48,7 @@ export default async function databaseProfile(ctx: CommandContext<DatabaseContex
   try {
     await ctx.replyWithPhoto(getImageUrl('/thumbnails/expertise.png'), {
       caption: profileText,
-      parse_mode: 'Markdown',
+      parse_mode: 'HTML',
       reply_markup: {
         inline_keyboard: inlineKeyboard,
       },
@@ -56,7 +56,7 @@ export default async function databaseProfile(ctx: CommandContext<DatabaseContex
   } catch (error) {
     // Fallback to text message if photo fails
     await ctx.reply(profileText, {
-      parse_mode: 'Markdown',
+      parse_mode: 'HTML',
       reply_markup: {
         inline_keyboard: inlineKeyboard,
       },
