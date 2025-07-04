@@ -5,7 +5,7 @@
   "main": "src/index.ts",
   "scripts": {
     "build": "prisma generate && tsc",
-    "start": "tsx src/index.ts",
+    "start": "tsx src/index.ts && pnpm db:studio",
     "dev": "tsx src/index.ts",
     "dev:watch": "tsx --watch src/index.ts",
     "clean": "rm -rf dist",

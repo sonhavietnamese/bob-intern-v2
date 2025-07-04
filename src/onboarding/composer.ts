@@ -45,11 +45,10 @@ databaseComposer.on('callback_query', handleDatabaseCallbackQuery)
 databaseComposer.on('message:text', handleDatabaseTextMessage)
 
 export const databaseCommands = [
-  { command: 'start', description: 'Start the bot' },
-  { command: 'listing', description: 'Open listings' },
-  { command: 'expertise', description: 'Open expertise' },
-  { command: 'skills', description: 'Open skills' },
-  { command: 'range', description: 'Open range' },
+  { command: 'start', description: 'Start the onboarding flow' },
+  { command: 'listing', description: 'Setup your listing preferences' },
+  { command: 'expertise', description: 'Setup your expertise' },
+  { command: 'skills', description: 'Setup your skills' },
+  { command: 'range', description: 'Setup your USD range' },
   { command: 'profile', description: 'View your profile' },
-  { command: 'test', description: 'Test image display' },
 ]
