@@ -1,59 +1,65 @@
-import { getImageUrl } from '@/lib/url'
-import type { OnboardingContext } from '@/onboarding/types'
 import { CommandContext } from 'grammy'
-import { dbService } from '@/database/services'
+import type { DatabaseContext } from '@/onboarding/types'
+import { getImageUrl } from '@/lib/url'
 
-export default async function profile(ctx: CommandContext<OnboardingContext>) {
-  const telegramId = ctx.from?.id.toString()
+export default async function databaseProfile(ctx: CommandContext<DatabaseContext>) {
+  // Reload user data to get the latest information
+  await ctx.reloadUserData()
 
-  if (!telegramId) {
-    await ctx.reply('❌ Unable to identify user')
+  const { user, expertise, skills, listings, priceRange } = ctx.userData
+
+  if (!user) {
+    await ctx.reply('You need to start the bot first. Use /start to begin!')
     return
   }
 
-  const userProfile = await dbService.getUserProfile(telegramId)
+  let profileText = `👤 **${user.userName}**\n\n`
 
-  if (!userProfile) {
-    await ctx.reply('❌ No profile found. Please start the onboarding process with /start')
-    return
-  }
-
-  const { user, expertise, skills, listings, priceRange } = userProfile
-
-  let profileText = `👤 **Profile: ${user.userName}**\n\n`
-
-  if (expertise.length > 0) {
+  if (expertise && expertise.length > 0) {
     profileText += `🎯 **Expertise**: ${expertise.join(', ')}\n`
   }
 
-  if (skills.length > 0) {
-    profileText += `⚡ **Skills**: ${skills.join(', ')}\n`
+  if (skills && skills.length > 0) {
+    profileText += `🛠️ **Skills**: ${skills.join(', ')}\n`
   }
 
-  if (listings.length > 0) {
-    profileText += `📋 **Preferred Listings**: ${listings.join(', ')}\n`
+  if (listings && listings.length > 0) {
+    profileText += `📋 **Interested in**: ${listings.join(', ')}\n`
   }
 
   if (priceRange) {
-    profileText += `💰 **Price Range**: ${priceRange.label} ($${priceRange.min} - $${priceRange.max})\n`
+    profileText += `💰 **Price Range**: ${priceRange.rangeLabel} ($${priceRange.minAmount} - $${priceRange.maxAmount})\n`
   }
 
-  profileText += `\n📅 **Member since**: ${new Date(user.createdAt || '').toLocaleDateString()}`
+  profileText += `\n⏰ **Joined**: ${user.createdAt.toLocaleDateString()}`
 
-  // Send profile information
-  await ctx.reply(profileText, {
-    parse_mode: 'Markdown',
-    reply_markup: {
-      inline_keyboard: [
-        [
-          { text: '✏️ Update Expertise', callback_data: 'update_expertise' },
-          { text: '🛠️ Update Skills', callback_data: 'update_skills' },
-        ],
-        [
-          { text: '📋 Update Listings', callback_data: 'update_listings' },
-          { text: '💰 Update Range', callback_data: 'update_range' },
-        ],
-      ],
-    },
-  })
+  // Show update buttons
+  const inlineKeyboard = [
+    [
+      { text: '🎯 Update Expertise', callback_data: 'update_expertise' },
+      { text: '🛠️ Update Skills', callback_data: 'update_skills' },
+    ],
+    [
+      { text: '📋 Update Listings', callback_data: 'update_listings' },
+      { text: '💰 Update Range', callback_data: 'update_range' },
+    ],
+  ]
+
+  try {
+    await ctx.replyWithPhoto(getImageUrl('/thumbnails/expertise.png'), {
+      caption: profileText,
+      parse_mode: 'Markdown',
+      reply_markup: {
+        inline_keyboard: inlineKeyboard,
+      },
+    })
+  } catch (error) {
+    // Fallback to text message if photo fails
+    await ctx.reply(profileText, {
+      parse_mode: 'Markdown',
+      reply_markup: {
+        inline_keyboard: inlineKeyboard,
+      },
+    })
+  }
 }

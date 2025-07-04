@@ -1,10 +1,10 @@
-import type { OnboardingContext } from '@/onboarding/types'
-import expertise from '@/onboarding/commands/expertise'
+import type { DatabaseContext } from '@/onboarding/types'
+import { handleNameInput, showExpertiseSelection } from '@/onboarding/utils/helpers'
 import { generateNameCard } from '@/lib/utils'
 import { getImageUrl } from '@/lib/url'
-import { dbService } from '@/database/services'
+import { ensureUserExists } from '@/database/middleware'
 
-export async function handleTextMessage(ctx: OnboardingContext) {
+export async function handleDatabaseTextMessage(ctx: DatabaseContext) {
   if (ctx.session.waitingForName) {
     const userName = ctx.message?.text
 
@@ -14,35 +14,21 @@ export async function handleTextMessage(ctx: OnboardingContext) {
 
     const telegramId = ctx.message.from.id.toString()
 
-    // Create or update user in database
-    let user = await dbService.getUserByTelegramId(telegramId)
+    // Ensure user exists in database
+    await ensureUserExists(ctx)
 
-    if (!user) {
-      // Create new user
-      user = await dbService.createUser({
-        telegramId,
-        userName,
+    // Update user name in database
+    await ctx.updateUserData({
+      user: {
+        ...ctx.userData.user!,
+        userName: userName.trim(),
         firstName: ctx.message.from.first_name || '',
         lastName: ctx.message.from.last_name || '',
         username: ctx.message.from.username || '',
-      })
-    } else {
-      // Update existing user
-      user = await dbService.updateUser(telegramId, {
-        userName,
-        firstName: ctx.message.from.first_name || '',
-        lastName: ctx.message.from.last_name || '',
-        username: ctx.message.from.username || '',
-      })
-    }
-
-    if (!user) {
-      await ctx.reply('Sorry, there was an error saving your information. Please try again.')
-      return
-    }
+      },
+    })
 
     ctx.session.waitingForName = false
-    ctx.session.userName = userName
 
     await ctx.reply('Awesome, I am creating your name card... Hold on!')
 
@@ -50,12 +36,14 @@ export async function handleTextMessage(ctx: OnboardingContext) {
     const image = await generateNameCard(userName, telegramId)
 
     // Name card image is saved to file system and displayed directly
-
     await ctx.replyWithPhoto(getImageUrl(image), {
       caption: `Here's your builder gear, ${userName}!`,
     })
 
-    // Continue to expertise selection using the existing command
-    await expertise(ctx as any)
+    // Continue to next step if in onboarding flow
+    if (ctx.session.isOnboarding) {
+      // Show expertise selection directly
+      await showExpertiseSelection(ctx)
+    }
   }
 }

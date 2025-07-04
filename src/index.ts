@@ -1,25 +1,19 @@
 import 'dotenv/config'
 
-import type { Context, SessionFlavor } from 'grammy'
 import { Bot, webhookCallback } from 'grammy'
-
-import { commands as onboardingCommands, composer as onboardingComposer } from './onboarding/composer'
-import type { OnboardingSessionData } from './onboarding/types'
-
-import { getBaseUrl, setServerUrl, getImageUrl } from './lib/url'
-import { generateImage, generateListingThumbnail } from './lib/utils'
+import { databaseCommands, databaseComposer } from './onboarding/composer'
+import type { DatabaseContext } from './onboarding/types'
+import { createMessageQueue } from './lib/message-queue'
 import { preload } from './lib/preload'
-// import { initDatabase } from './database/connection'
-
+import { getBaseUrl, getImageUrl, setServerUrl } from './lib/url'
+import { generateImage, generateListingThumbnail } from './lib/utils'
 import fastifyStatic from '@fastify/static'
 import ngrok from '@ngrok/ngrok'
 import fastify from 'fastify'
+import * as cron from 'node-cron'
 import path from 'path'
 import { initDatabase } from './database/connection'
 import { dbService } from './database/services'
-import * as cron from 'node-cron'
-
-type MyContext = Context & SessionFlavor<OnboardingSessionData>
 
 export const {
   TELEGRAM_BOT_TOKEN: token,
@@ -48,11 +42,14 @@ const isProduction = process.env.NODE_ENV === 'production'
 console.log('✅ Environment variables loaded successfully')
 console.log(`🔧 Running in ${isDevelopment ? 'DEVELOPMENT' : isProduction ? 'PRODUCTION' : 'UNKNOWN'} mode`)
 
-export const bot = new Bot<MyContext>(token)
+export const bot = new Bot<DatabaseContext>(token)
 
-bot.api.setMyCommands([...onboardingCommands, { command: 'help', description: 'Show help text' }])
+// Create message queue instance
+export const messageQueue = createMessageQueue(bot)
 
-bot.use(onboardingComposer)
+bot.api.setMyCommands([...databaseCommands, { command: 'help', description: 'Show help text' }])
+
+bot.use(databaseComposer)
 
 server.post('/api/generate-image', async (request, reply) => {
   try {
@@ -103,6 +100,43 @@ server.post('/api/send-test-message', async (request, reply) => {
   }
 })
 
+server.get('/api/queue-status', async (request, reply) => {
+  try {
+    const status = messageQueue.getQueueStatus()
+    reply.send({
+      success: true,
+      data: {
+        queueSize: status.queueSize,
+        isProcessing: status.isProcessing,
+        nextScheduledMessage: status.nextScheduledMessage,
+        estimatedTimeToComplete: status.queueSize > 0 ? Math.ceil(status.queueSize / 25) : 0, // seconds
+      },
+    })
+  } catch (error) {
+    console.error('Error getting queue status:', error)
+    reply.status(500).send({
+      success: false,
+      error: 'Failed to get queue status',
+    })
+  }
+})
+
+server.post('/api/clear-queue', async (request, reply) => {
+  try {
+    messageQueue.clearQueue()
+    reply.send({
+      success: true,
+      message: 'Message queue cleared',
+    })
+  } catch (error) {
+    console.error('Error clearing queue:', error)
+    reply.status(500).send({
+      success: false,
+      error: 'Failed to clear queue',
+    })
+  }
+})
+
 server.post(`/${token}`, webhookCallback(bot, 'fastify', { secretToken: secretToken }))
 
 server.setErrorHandler(async (error) => {
@@ -122,45 +156,50 @@ async function sendTestMessageToAllUsers() {
       return
     }
 
-    console.log(`📨 Found ${users.length} users, sending test message...`)
+    console.log(`📨 Found ${users.length} users, adding to message queue...`)
 
     // Generate thumbnail for the test message
     const imageUrl = await generateListingThumbnail('Build your App with AI on Solana: AImpact Beta Challenge')
 
-    // Send message to each user
-    let successCount = 0
-    let errorCount = 0
-
-    for (const user of users) {
-      try {
-        await bot.api.sendPhoto(user.telegramId, getImageUrl(imageUrl), {
-          caption: `**Kumeka Team** is sponsoring this listing!
+    // Prepare message data
+    const messageOptions = {
+      caption: `**Kumeka Team** is sponsoring this listing!
 
 Build no-code Solana apps with AImpact for a chance to win up to $2000 USDC and shape the future of AI-powered development.`,
-          parse_mode: 'Markdown',
-          reply_markup: {
-            inline_keyboard: [
-              [
-                {
-                  text: 'Remind me every 12 hours',
-                  callback_data: 'remind_me',
-                },
-                {
-                  text: 'Join',
-                  url: 'https://earn.superteam.fun/listing/aimpact-beta-challenge/?utm_source=telegrambot',
-                },
-              ],
-            ],
-          },
-        })
-        successCount++
-      } catch (error) {
-        console.error(`❌ Failed to send message to user ${user.telegramId}:`, error)
-        errorCount++
-      }
+      parse_mode: 'Markdown' as const,
+      reply_markup: {
+        inline_keyboard: [
+          [
+            {
+              text: 'Remind me every 12 hours',
+              callback_data: 'remind_me',
+            },
+            {
+              text: 'Join',
+              url: 'https://earn.superteam.fun/listing/aimpact-beta-challenge/?utm_source=telegrambot',
+            },
+          ],
+        ],
+      },
     }
 
-    console.log(`✅ Cronjob completed: ${successCount} messages sent successfully, ${errorCount} errors`)
+    // Add all messages to the queue
+    const queuedMessages = users.map((user) => ({
+      userId: user.id.toString(),
+      telegramId: user.telegramId,
+      messageData: {
+        type: 'photo' as const,
+        content: getImageUrl(imageUrl),
+        options: messageOptions,
+      },
+      maxRetries: 3,
+      scheduledAt: new Date(), // Send immediately
+    }))
+
+    messageQueue.addBulkMessages(queuedMessages)
+
+    const queueStatus = messageQueue.getQueueStatus()
+    console.log(`✅ Added ${users.length} messages to queue. Queue size: ${queueStatus.queueSize}`)
   } catch (error) {
     console.error('❌ Cronjob error:', error)
   }
@@ -209,7 +248,7 @@ server.listen({ port: +PORT, host: '0.0.0.0' }, async (error) => {
   await setupWebhookWithRetry(webhookUrl, secretToken)
 
   // Set up cronjob to send test message every 5 minutes
-  cron.schedule('*/10 * * * * *', sendTestMessageToAllUsers, {
+  cron.schedule('*/5 * * * *', sendTestMessageToAllUsers, {
     timezone: 'UTC',
   })
 

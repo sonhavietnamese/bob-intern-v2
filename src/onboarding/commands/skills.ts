@@ -1,11 +1,11 @@
-import { SKILLS } from '@/constants'
-import type { OnboardingContext } from '@/onboarding/types'
-import { checkPrerequisites, startOnboardingFlow } from '@/onboarding/utils/helpers'
 import { CommandContext } from 'grammy'
+import type { DatabaseContext } from '@/onboarding/types'
+import { getMissingOnboardingSteps, startOnboardingFlow, checkPrerequisites } from '@/onboarding/utils/helpers'
+import { SKILLS } from '@/constants'
 
-export default async function skills(ctx: CommandContext<OnboardingContext>) {
+export default async function databaseSkills(ctx: CommandContext<DatabaseContext>) {
   // Check if prerequisites are missing (name and expertise are required for skills)
-  const missingPrerequisites = checkPrerequisites(ctx, 'expertise') // Skills require expertise
+  const missingPrerequisites = checkPrerequisites(ctx, 'skills')
 
   if (missingPrerequisites.length > 0) {
     await ctx.reply(`You need to complete these steps first: ${missingPrerequisites.join(', ')}. Starting onboarding flow...`)
@@ -13,23 +13,31 @@ export default async function skills(ctx: CommandContext<OnboardingContext>) {
     return
   }
 
-  // Initialize selectedSkills if it doesn't exist
-  if (!ctx.session.selectedSkills) {
-    ctx.session.selectedSkills = []
-  }
-
   // Check if user has selected expertise
-  if (!ctx.session.selectedExpertise || ctx.session.selectedExpertise.length === 0) {
+  if (!ctx.userData.expertise || ctx.userData.expertise.length === 0) {
     await ctx.reply('Please select your expertise first using /expertise command before choosing specific skills.')
     return
   }
 
-  // Set to individual command mode
-  ctx.session.isOnboarding = false
+  const missing = getMissingOnboardingSteps(ctx)
+
+  // If multiple steps are missing, start onboarding flow from skills
+  if (missing.length > 1 && missing.includes('skills')) {
+    await startOnboardingFlow(ctx, 'skills')
+  } else {
+    // Just show skills selection (individual command mode)
+    ctx.session.isOnboarding = false
+    await showSkillsSelection(ctx)
+  }
+}
+
+async function showSkillsSelection(ctx: DatabaseContext) {
+  const userExpertise = ctx.userData.expertise || []
+  const userSkills = ctx.userData.skills || []
 
   // Get all skills from selected expertise areas
   const allAvailableSkills: string[] = []
-  ctx.session.selectedExpertise.forEach((expertise) => {
+  userExpertise.forEach((expertise) => {
     const skillsForExpertise = SKILLS[expertise as keyof typeof SKILLS]
     if (skillsForExpertise) {
       allAvailableSkills.push(...skillsForExpertise)
@@ -46,7 +54,7 @@ export default async function skills(ctx: CommandContext<OnboardingContext>) {
 
   const inlineKeyboard = [
     ...uniqueSkills.map((skill) => {
-      const isSelected = ctx.session.selectedSkills!.includes(skill)
+      const isSelected = userSkills.includes(skill)
       const checkbox = isSelected ? '✅' : '☐'
       return [
         { text: skill, callback_data: `toggle_skill_${skill}` },

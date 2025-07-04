@@ -1,38 +1,20 @@
 import { USD_RANGES } from '@/constants'
-import type { OnboardingContext } from '@/onboarding/types'
+import type { DatabaseContext } from '@/onboarding/types'
 import {
   proceedToNextOnboardingStep,
-  removeExpertiseIfNoSkills,
   updateExpertiseMessage,
   updateListingMessage,
   updateSkillBasedOnExpertise,
   updateSkillsMessage,
 } from '@/onboarding/utils/helpers'
-import { dbService } from '@/database/services'
-import expertiseCommand from '@/onboarding/commands/expertise'
-import skillsCommand from '@/onboarding/commands/skills'
-import listingCommand from '@/onboarding/commands/listing'
-import rangeCommand from '@/onboarding/commands/range'
 import { getImageUrl } from '@/lib/url'
 
-export async function handleCallbackQuery(ctx: OnboardingContext) {
+export async function handleDatabaseCallbackQuery(ctx: DatabaseContext) {
   if (!ctx.callbackQuery?.data) {
     return
   }
 
   const data = ctx.callbackQuery.data
-
-  if (!ctx.session.selectedExpertise) {
-    ctx.session.selectedExpertise = []
-  }
-
-  if (!ctx.session.selectedSkills) {
-    ctx.session.selectedSkills = []
-  }
-
-  if (!ctx.session.selectedListings) {
-    ctx.session.selectedListings = []
-  }
 
   if (data.startsWith('toggle_listing_')) {
     await handleListingToggle(ctx, data)
@@ -55,69 +37,78 @@ export async function handleCallbackQuery(ctx: OnboardingContext) {
   await ctx.answerCallbackQuery()
 }
 
-async function handleListingToggle(ctx: OnboardingContext, data: string) {
+async function handleListingToggle(ctx: DatabaseContext, data: string) {
   const listing = data.replace('toggle_listing_', '')
   const listingName = listing === 'bounties' ? 'Bounties' : 'Projects'
 
-  if (ctx.session.selectedListings!.includes(listingName)) {
-    ctx.session.selectedListings = ctx.session.selectedListings!.filter((l) => l !== listingName)
+  const currentListings = ctx.userData.listings || []
+  let newListings: string[]
+
+  if (currentListings.includes(listingName)) {
+    newListings = currentListings.filter((l) => l !== listingName)
   } else {
-    ctx.session.selectedListings!.push(listingName)
+    newListings = [...currentListings, listingName]
   }
+
+  // Update database
+  await ctx.updateUserData({ listings: newListings })
 
   // Update the message
   await updateListingMessage(ctx)
 }
 
-async function handleSkillToggle(ctx: OnboardingContext, data: string) {
+async function handleSkillToggle(ctx: DatabaseContext, data: string) {
   const skill = data.replace('toggle_skill_', '')
 
-  if (ctx.session.selectedSkills!.includes(skill)) {
-    ctx.session.selectedSkills = ctx.session.selectedSkills!.filter((s) => s !== skill)
+  const currentSkills = ctx.userData.skills || []
+  let newSkills: string[]
+
+  if (currentSkills.includes(skill)) {
+    newSkills = currentSkills.filter((s) => s !== skill)
   } else {
-    ctx.session.selectedSkills!.push(skill)
+    newSkills = [...currentSkills, skill]
   }
 
+  // Update database
+  await ctx.updateUserData({ skills: newSkills })
+
+  // Update the message
   await updateSkillsMessage(ctx)
 }
 
-async function handleExpertiseToggle(ctx: OnboardingContext, data: string) {
+async function handleExpertiseToggle(ctx: DatabaseContext, data: string) {
   const expertise = data.replace('toggle_', '')
 
-  if (ctx.session.selectedExpertise!.includes(expertise)) {
+  const currentExpertise = ctx.userData.expertise || []
+  let newExpertise: string[]
+
+  if (currentExpertise.includes(expertise)) {
     // Remove from selected expertise
-    ctx.session.selectedExpertise = ctx.session.selectedExpertise!.filter((e) => e !== expertise)
+    newExpertise = currentExpertise.filter((e) => e !== expertise)
   } else {
     // Add to selected expertise
-    ctx.session.selectedExpertise!.push(expertise)
+    newExpertise = [...currentExpertise, expertise]
   }
 
-  // Update skills based on current expertise selection (both add and remove cases)
-  updateSkillBasedOnExpertise(ctx, expertise)
+  // Update database
+  await ctx.updateUserData({ expertise: newExpertise })
+
+  // Update skills based on current expertise selection
+  await updateSkillBasedOnExpertise(ctx, expertise)
 
   // Update the message
   await updateExpertiseMessage(ctx)
 }
 
-async function handleExpertiseDone(ctx: OnboardingContext) {
+async function handleExpertiseDone(ctx: DatabaseContext) {
+  const userExpertise = ctx.userData.expertise || []
   const selectedExpertiseText =
-    ctx.session.selectedExpertise!.length > 0
-      ? `Great! You've selected these expertise: ${ctx.session.selectedExpertise!.join(', ')}
-      you can tell me more about your specific skills later using /skills command`
-      : 'No expertise selected.'
-
-  // Save expertise to database
-  const telegramId = ctx.from?.id.toString()
-  if (telegramId) {
-    await dbService.setUserExpertise(telegramId, ctx.session.selectedExpertise || [])
-    // Also save the auto-selected skills to database
-    await dbService.setUserSkills(telegramId, ctx.session.selectedSkills || [])
-  }
+    userExpertise.length > 0 ? `Great! You've selected these expertise: ${userExpertise.join(', ')}` : 'No expertise selected.'
 
   try {
     await ctx.editMessageCaption({ reply_markup: { inline_keyboard: [] } })
     await ctx.replyWithPhoto(getImageUrl('/thumbnails/expertise-response-001.png'), {
-      caption: `Nice! You've selected these expertise: ${ctx.session.selectedExpertise!.join(', ')}`,
+      caption: `Nice! You've selected these expertise: ${userExpertise.join(', ')}`,
       reply_markup: {
         inline_keyboard: [],
       },
@@ -128,7 +119,7 @@ async function handleExpertiseDone(ctx: OnboardingContext) {
       reply_markup: { inline_keyboard: [] },
     })
     await ctx.replyWithPhoto(getImageUrl('/thumbnails/expertise-response-001.png'), {
-      caption: `Nice! You've selected these expertise: ${ctx.session.selectedExpertise!.join(', ')}`,
+      caption: `Nice! You've selected these expertise: ${userExpertise.join(', ')}`,
       reply_markup: {
         inline_keyboard: [],
       },
@@ -141,37 +132,25 @@ async function handleExpertiseDone(ctx: OnboardingContext) {
   }
 }
 
-async function handleSkillsDone(ctx: OnboardingContext) {
-  // Clean up expertise that have no selected skills
-  removeExpertiseIfNoSkills(ctx)
-
-  const selectedSkillsText =
-    ctx.session.selectedSkills!.length > 0 ? `Great! You've selected these skills: ${ctx.session.selectedSkills!.join(', ')}` : 'No skills selected.'
-
-  // Save skills to database
-  const telegramId = ctx.from?.id.toString()
-  if (telegramId) {
-    await dbService.setUserSkills(telegramId, ctx.session.selectedSkills || [])
-  }
+async function handleSkillsDone(ctx: DatabaseContext) {
+  const userSkills = ctx.userData.skills || []
+  const selectedSkillsText = userSkills.length > 0 ? `Great! You've selected these skills: ${userSkills.join(', ')}` : 'No skills selected.'
 
   try {
-    // await ctx.editMessageCaption({
-    //   caption: selectedSkillsText,
-    //   reply_markup: { inline_keyboard: [] },
-    // })
-    await ctx.replyWithPhoto('https://bob-intern-cdn.vercel.app/skills.png', {
-      caption: `Great! You've selected these skills: ${ctx.session.selectedSkills!.join(', ')}`,
+    await ctx.editMessageCaption({ reply_markup: { inline_keyboard: [] } })
+    await ctx.replyWithPhoto(getImageUrl('/thumbnails/expertise-response-001.png'), {
+      caption: `Nice! You've selected these skills: ${userSkills.join(', ')}`,
       reply_markup: {
         inline_keyboard: [],
       },
     })
   } catch (error) {
     // Fallback to editing text if caption fails
-    // await ctx.editMessageText(selectedSkillsText, {
-    //   reply_markup: { inline_keyboard: [] },
-    // })
-    await ctx.replyWithPhoto('https://bob-intern-cdn.vercel.app/skills.png', {
-      caption: `Great! You've selected these skills: ${ctx.session.selectedSkills!.join(', ')}`,
+    await ctx.editMessageText(selectedSkillsText, {
+      reply_markup: { inline_keyboard: [] },
+    })
+    await ctx.replyWithPhoto(getImageUrl('/thumbnails/expertise-response-001.png'), {
+      caption: `Nice! You've selected these skills: ${userSkills.join(', ')}`,
       reply_markup: {
         inline_keyboard: [],
       },
@@ -184,21 +163,14 @@ async function handleSkillsDone(ctx: OnboardingContext) {
   }
 }
 
-async function handleListingDone(ctx: OnboardingContext) {
-  console.log('handleListingDone', ctx.session.selectedListings)
-  const selectedListingsText =
-    ctx.session.selectedListings!.length > 0 ? `Great! You prefer: ${ctx.session.selectedListings!.join(', ')}` : 'No preference selected.'
-
-  // Save listings to database
-  const telegramId = ctx.from?.id.toString()
-  if (telegramId) {
-    await dbService.setUserListings(telegramId, ctx.session.selectedListings || [])
-  }
+async function handleListingDone(ctx: DatabaseContext) {
+  const userListings = ctx.userData.listings || []
+  const selectedListingsText = userListings.length > 0 ? `Great! You prefer: ${userListings.join(', ')}` : 'No preference selected.'
 
   try {
     await ctx.editMessageCaption({ reply_markup: { inline_keyboard: [] } })
     await ctx.replyWithPhoto('https://bob-intern-cdn.vercel.app/listing.png', {
-      caption: `Great! You prefer: ${ctx.session.selectedListings!.join(', ')}`,
+      caption: `Great! You prefer: ${userListings.join(', ')}`,
       reply_markup: {
         inline_keyboard: [],
       },
@@ -209,7 +181,7 @@ async function handleListingDone(ctx: OnboardingContext) {
       reply_markup: { inline_keyboard: [] },
     })
     await ctx.replyWithPhoto('https://bob-intern-cdn.vercel.app/listing.png', {
-      caption: `Great! You prefer: ${ctx.session.selectedListings!.join(', ')}`,
+      caption: `Great! You prefer: ${userListings.join(', ')}`,
       reply_markup: {
         inline_keyboard: [],
       },
@@ -222,73 +194,79 @@ async function handleListingDone(ctx: OnboardingContext) {
   }
 }
 
-async function handleRangeSelection(ctx: OnboardingContext, data: string) {
-  const rangeIndex = parseInt(data.replace('select_range_', ''))
-  const selectedRange = USD_RANGES[rangeIndex]
+async function handleRangeSelection(ctx: DatabaseContext, data: string) {
+  const parts = data.replace('select_range_', '').split('_')
 
-  if (selectedRange) {
-    ctx.session.selectedRange = selectedRange.value
+  if (parts.length < 2 || !parts[0] || !parts[1]) {
+    await ctx.reply('Invalid range selection format')
+    return
+  }
 
-    // Save price range to database
-    const telegramId = ctx.from?.id.toString()
-    if (telegramId) {
-      await dbService.setUserPriceRange(telegramId, {
-        minAmount: selectedRange.value.min,
-        maxAmount: selectedRange.value.max,
-        rangeLabel: selectedRange.label,
-      })
-    }
+  const minAmount = parseInt(parts[0], 10)
+  const maxAmount = parseInt(parts[1], 10)
 
-    const selectedRangeText = `Perfect! You've selected "${selectedRange.label}" with a range of $${selectedRange.value.min} - $${selectedRange.value.max}`
+  // Find the range object
+  const range = USD_RANGES.find((r) => r.value.min === minAmount && r.value.max === maxAmount)
 
-    try {
-      // await ctx.editMessageCaption({
-      //   caption: selectedRangeText,
-      //   reply_markup: { inline_keyboard: [] },
-      // })
-      await ctx.replyWithPhoto('https://bob-intern-cdn.vercel.app/range.png', {
-        caption: `Perfect! You've selected "${selectedRange.label}" with a range of $${selectedRange.value.min} - $${selectedRange.value.max}`,
-        reply_markup: {
-          inline_keyboard: [],
-        },
-      })
-    } catch (error) {
-      // Fallback to editing text if caption fails
-      // await ctx.editMessageText(selectedRangeText, {
-      //   reply_markup: { inline_keyboard: [] },
-      // })
-      await ctx.replyWithPhoto('https://bob-intern-cdn.vercel.app/range.png', {
-        caption: `Perfect! You've selected "${selectedRange.label}" with a range of $${selectedRange.value.min} - $${selectedRange.value.max}`,
-        reply_markup: {
-          inline_keyboard: [],
-        },
-      })
-    }
+  if (!range) {
+    await ctx.reply('Invalid range selection')
+    return
+  }
 
-    // If in onboarding flow, proceed to next step; otherwise just finish
-    if (ctx.session.isOnboarding) {
-      await proceedToNextOnboardingStep(ctx)
-    }
+  const priceRange = {
+    minAmount,
+    maxAmount,
+    rangeLabel: range.label,
+  }
+
+  // Update database
+  await ctx.updateUserData({ priceRange })
+
+  try {
+    await ctx.editMessageCaption({ reply_markup: { inline_keyboard: [] } })
+    await ctx.replyWithPhoto(getImageUrl('/thumbnails/range.png'), {
+      caption: `Perfect! You've selected ${range.label} ($${minAmount} - $${maxAmount})`,
+      reply_markup: {
+        inline_keyboard: [],
+      },
+    })
+  } catch (error) {
+    // Fallback to editing text if caption fails
+    await ctx.editMessageText(`Perfect! You've selected ${range.label} ($${minAmount} - $${maxAmount})`, {
+      reply_markup: { inline_keyboard: [] },
+    })
+    await ctx.replyWithPhoto(getImageUrl('/thumbnails/range.png'), {
+      caption: `Perfect! You've selected ${range.label} ($${minAmount} - $${maxAmount})`,
+      reply_markup: {
+        inline_keyboard: [],
+      },
+    })
+  }
+
+  // If in onboarding flow, proceed to next step; otherwise just finish
+  if (ctx.session.isOnboarding) {
+    await proceedToNextOnboardingStep(ctx)
   }
 }
 
-async function handleProfileUpdate(ctx: OnboardingContext, data: string) {
+async function handleProfileUpdate(ctx: DatabaseContext, data: string) {
   const updateType = data.replace('update_', '')
 
+  // Handle profile updates based on the type
   switch (updateType) {
     case 'expertise':
-      await expertiseCommand(ctx as any)
+      // Add logic to update expertise
       break
     case 'skills':
-      await skillsCommand(ctx as any)
+      // Add logic to update skills
       break
     case 'listings':
-      await listingCommand(ctx as any)
+      // Add logic to update listings
       break
     case 'range':
-      await rangeCommand(ctx as any)
+      // Add logic to update range
       break
     default:
-      await ctx.reply('❌ Unknown update type')
+      await ctx.reply('Unknown update type')
   }
 }

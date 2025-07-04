@@ -1,299 +1,38 @@
 import { EXPERTISE_GROUPS, SKILLS, USD_RANGES } from '@/constants'
 import { getImageUrl } from '@/lib/url'
-import type { OnboardingContext } from '@/onboarding/types'
+import type { DatabaseContext } from '@/onboarding/types'
+import { ensureUserExists } from '@/database/middleware'
 
-// Helper function to update the skills message
-export async function updateExpertiseMessage(ctx: OnboardingContext) {
-  const inlineKeyboard = [
-    ...Object.values(EXPERTISE_GROUPS).map((expertise) => {
-      const isSelected = ctx.session.selectedExpertise!.includes(expertise)
-      const checkbox = isSelected ? '✅' : '☐'
-      return [
-        { text: `${expertise}`, callback_data: `toggle_${expertise}` },
-        {
-          text: `${checkbox}`,
-          callback_data: `toggle_${expertise}`,
-        },
-      ]
-    }),
-    [{ text: 'Done', callback_data: 'expertise_done' }],
-  ]
+/**
+ * Database-backed helper functions that work with DatabaseContext
+ * These replace the session-based helpers
+ */
 
-  try {
-    await ctx.editMessageCaption({
-      caption: `I am an expert on Remind People to Earn, so some people call me Bob the Honkor.
-
-How about you?`,
-      reply_markup: {
-        inline_keyboard: inlineKeyboard,
-      },
-    })
-  } catch (error) {
-    // If editing caption fails (might be a text message), try editing text instead
-    try {
-      await ctx.editMessageText(
-        `I am an expert on Remind People to Earn, so some people call me Bob the Honkor.
-
-How about you?`,
-        {
-          reply_markup: {
-            inline_keyboard: inlineKeyboard,
-          },
-        },
-      )
-    } catch (editError) {
-      console.error('Failed to update expertise message:', editError)
-    }
-  }
-}
-
-// Helper function to update the listing message
-export async function updateListingMessage(ctx: OnboardingContext) {
-  const listings = ['Bounties', 'Projects']
-
-  const inlineKeyboard = [
-    ...listings.map((listing) => {
-      const isSelected = ctx.session.selectedListings!.includes(listing)
-      const checkbox = isSelected ? '✅' : '☐'
-      return [
-        { text: `${listing}`, callback_data: `toggle_listing_${listing.toLowerCase()}` },
-        { text: `${checkbox}`, callback_data: `toggle_listing_${listing.toLowerCase()}` },
-      ]
-    }),
-    [{ text: 'Done', callback_data: 'listing_done' }],
-  ]
-
-  try {
-    await ctx.editMessageCaption({
-      caption: `Superteam Earn comes with Bounties and Projects,
-- Bounties: A list of tasks that you can complete to earn rewards.
-- Projects: Best fit if you are a freelance developer.
-
-Which one do you prefer?`,
-      parse_mode: 'Markdown',
-      reply_markup: {
-        inline_keyboard: inlineKeyboard,
-      },
-    })
-  } catch (error) {
-    // If editing caption fails, try editing text instead
-    try {
-      await ctx.editMessageText(
-        `Superteam Earn comes with Bounties and Projects,
-- Bounties: A list of tasks that you can complete to earn rewards.
-- Projects: Best fit if you are a freelance developer.
-
-Which one do you prefer?`,
-        {
-          reply_markup: {
-            inline_keyboard: inlineKeyboard,
-          },
-          parse_mode: 'Markdown',
-        },
-      )
-    } catch (editError) {
-      console.error('Failed to update listing message:', editError)
-    }
-  }
-}
-
-// Helper function to show USD range selection
-export async function showUSDRangeSelection(ctx: OnboardingContext) {
-  const inlineKeyboard = USD_RANGES.map((range, index) => [
-    {
-      text: `${range.label} ($${range.value.min.toLocaleString()} - $${range.value.max.toLocaleString()})`,
-      callback_data: `select_range_${index}`,
-    },
-  ])
-
-  const caption = `Choose your best title, I will filter and notify you when there's a listing that matches your range.`
-
-  try {
-    await ctx.replyWithPhoto(getImageUrl('/thumbnails/range.png'), {
-      caption,
-      parse_mode: 'Markdown',
-      reply_markup: {
-        inline_keyboard: inlineKeyboard,
-      },
-    })
-  } catch (error) {
-    // Fallback to text message if image fails
-    console.error('Failed to send USD range image:', error)
-    await ctx.reply(caption, {
-      parse_mode: 'Markdown',
-      reply_markup: {
-        inline_keyboard: inlineKeyboard,
-      },
-    })
-  }
-}
-
-export function updateSkillBasedOnExpertise(ctx: OnboardingContext, expertise: string) {
-  // Rebuild the entire skills list based on all selected expertise
-  const allSkills: string[] = []
-
-  ctx.session.selectedExpertise!.forEach((selectedExpertise) => {
-    const skills = SKILLS[selectedExpertise as keyof typeof SKILLS]
-    if (skills) {
-      allSkills.push(...skills)
-    }
-  })
-
-  // Remove duplicates and update the session
-  ctx.session.selectedSkills = [...new Set(allSkills)]
-}
-
-// Helper function to update the skills message
-export async function updateSkillsMessage(ctx: OnboardingContext) {
-  // Get all skills from selected expertise areas
-  const allAvailableSkills: string[] = []
-  if (ctx.session.selectedExpertise) {
-    ctx.session.selectedExpertise.forEach((expertise) => {
-      const skillsForExpertise = SKILLS[expertise as keyof typeof SKILLS]
-      if (skillsForExpertise) {
-        allAvailableSkills.push(...skillsForExpertise)
-      }
-    })
-  }
-
-  // Remove duplicates
-  const uniqueSkills = [...new Set(allAvailableSkills)]
-
-  const inlineKeyboard = [
-    ...uniqueSkills.map((skill) => {
-      const isSelected = ctx.session.selectedSkills!.includes(skill)
-      const checkbox = isSelected ? '✅' : '☐'
-      return [
-        { text: skill, callback_data: `toggle_skill_${skill}` },
-        { text: checkbox, callback_data: `toggle_skill_${skill}` },
-      ]
-    }),
-    [{ text: 'Done', callback_data: 'skills_done' }],
-  ]
-
-  try {
-    await ctx.editMessageCaption({
-      caption: `Select your specific skills`,
-      reply_markup: {
-        inline_keyboard: inlineKeyboard,
-      },
-    })
-  } catch (error) {
-    // If editing caption fails, try editing text instead
-    try {
-      await ctx.editMessageText(`Select your specific skills`, {
-        reply_markup: {
-          inline_keyboard: inlineKeyboard,
-        },
-      })
-    } catch (editError) {
-      console.error('Failed to update skills message:', editError)
-    }
-  }
-}
-
-// Helper function to remove expertise if all its skills are unselected
-export function removeExpertiseIfNoSkills(ctx: OnboardingContext) {
-  // Check each expertise and remove if no skills from that expertise are selected
-  const expertiseToRemove: string[] = []
-
-  ctx.session.selectedExpertise!.forEach((expertise) => {
-    const expertiseSkills = SKILLS[expertise as keyof typeof SKILLS]
-    const hasSelectedSkills = expertiseSkills.some((skill) => ctx.session.selectedSkills!.includes(skill))
-
-    if (!hasSelectedSkills) {
-      expertiseToRemove.push(expertise)
-    }
-  })
-
-  // Remove expertise that have no selected skills
-  expertiseToRemove.forEach((expertise) => {
-    ctx.session.selectedExpertise = ctx.session.selectedExpertise!.filter((e) => e !== expertise)
-  })
-}
-
-// Helper function to show listing selection
-export async function showListingSelection(ctx: OnboardingContext) {
-  // Initialize selected listings if not exists
-  if (!ctx.session.selectedListings) {
-    ctx.session.selectedListings = []
-  }
-
-  const listings = ['Bounties', 'Projects']
-
-  const inlineKeyboard = [
-    ...listings.map((listing) => {
-      const isSelected = ctx.session.selectedListings!.includes(listing)
-      const checkbox = isSelected ? '✅' : '☐'
-      return [
-        { text: `${listing}`, callback_data: `toggle_listing_${listing.toLowerCase()}` },
-        { text: `${checkbox}`, callback_data: `toggle_listing_${listing.toLowerCase()}` },
-      ]
-    }),
-    [{ text: 'Done', callback_data: 'listing_done' }],
-  ]
-
-  try {
-    await ctx.replyWithPhoto(getImageUrl('/thumbnails/listing.png'), {
-      caption: `Superteam Earn comes with Bounties and Projects,
-- Bounties: A list of tasks that you can complete to earn rewards.
-- Projects: Best fit if you are a freelance developer.
-
-Which one do you prefer?`,
-      parse_mode: 'Markdown',
-      reply_markup: {
-        inline_keyboard: inlineKeyboard,
-      },
-    })
-  } catch (error) {
-    // Fallback to text message if image fails
-    console.error('Failed to send listing image:', error)
-    await ctx.reply(`Superteam Earn comes with Bounties and Projects, which you most prefer?`, {
-      reply_markup: {
-        inline_keyboard: inlineKeyboard,
-      },
-    })
-  }
-}
-
-// Helper function to check what onboarding steps are missing
-export function getMissingOnboardingSteps(ctx: OnboardingContext): string[] {
+// Helper function to check what onboarding steps are missing based on database data
+export function getMissingOnboardingSteps(ctx: DatabaseContext): string[] {
   const missing: string[] = []
 
-  if (!ctx.session.userName) {
+  if (!ctx.userData.user || !ctx.userData.user.userName) {
     missing.push('name')
   }
 
-  if (!ctx.session.selectedExpertise || ctx.session.selectedExpertise.length === 0) {
+  if (!ctx.userData.expertise || ctx.userData.expertise.length === 0) {
     missing.push('expertise')
   }
 
-  if (!ctx.session.selectedListings || ctx.session.selectedListings.length === 0) {
+  if (!ctx.userData.listings || ctx.userData.listings.length === 0) {
     missing.push('listing')
   }
 
-  if (!ctx.session.selectedRange) {
+  if (!ctx.userData.priceRange) {
     missing.push('range')
   }
 
   return missing
 }
 
-// Helper function to check prerequisites for a specific step
-export function checkPrerequisites(ctx: OnboardingContext, step: string): string[] {
-  const allSteps = ['name', 'expertise', 'listing', 'range']
-  const stepIndex = allSteps.indexOf(step)
-
-  if (stepIndex === -1) return []
-
-  const prerequisites = allSteps.slice(0, stepIndex)
-  const missing = getMissingOnboardingSteps(ctx)
-
-  return prerequisites.filter((prereq) => missing.includes(prereq))
-}
-
 // Helper function to start onboarding flow
-export async function startOnboardingFlow(ctx: OnboardingContext, startFrom?: string) {
+export async function startOnboardingFlow(ctx: DatabaseContext, startFrom?: string) {
   ctx.session.isOnboarding = true
   const missing = getMissingOnboardingSteps(ctx)
 
@@ -314,7 +53,7 @@ export async function startOnboardingFlow(ctx: OnboardingContext, startFrom?: st
 }
 
 // Helper function to proceed to next onboarding step
-export async function proceedToNextOnboardingStep(ctx: OnboardingContext) {
+export async function proceedToNextOnboardingStep(ctx: DatabaseContext) {
   if (!ctx.session.isOnboarding) return
 
   const missing = getMissingOnboardingSteps(ctx)
@@ -328,7 +67,7 @@ export async function proceedToNextOnboardingStep(ctx: OnboardingContext) {
 }
 
 // Helper function to proceed to a specific step
-async function proceedToStep(ctx: OnboardingContext, step: string) {
+async function proceedToStep(ctx: DatabaseContext, step: string) {
   switch (step) {
     case 'name':
       await askForName(ctx)
@@ -342,63 +81,13 @@ async function proceedToStep(ctx: OnboardingContext, step: string) {
     case 'range':
       await showUSDRangeSelection(ctx)
       break
-  }
-}
-
-// Helper function to show expertise selection
-export async function showExpertiseSelection(ctx: OnboardingContext) {
-  // Initialize selected expertise if not exists
-  if (!ctx.session.selectedExpertise) {
-    ctx.session.selectedExpertise = []
-  }
-
-  // Initialize selected skills if not exists
-  if (!ctx.session.selectedSkills) {
-    ctx.session.selectedSkills = []
-  }
-
-  const inlineKeyboard = [
-    ...Object.values(EXPERTISE_GROUPS).map((expertise) => {
-      const isSelected = ctx.session.selectedExpertise!.includes(expertise)
-      const checkbox = isSelected ? '✅' : '☐'
-      return [
-        { text: `${expertise}`, callback_data: `toggle_${expertise}` },
-        {
-          text: `${checkbox}`,
-          callback_data: `toggle_${expertise}`,
-        },
-      ]
-    }),
-    [{ text: 'Done', callback_data: 'expertise_done' }],
-  ]
-
-  try {
-    await ctx.replyWithPhoto(getImageUrl('/thumbnails/expertise.png'), {
-      caption: `I am an expert on Remind People to Earn, so some people call me Bob the Honkor.
-
-How about you?`,
-      reply_markup: {
-        inline_keyboard: inlineKeyboard,
-      },
-    })
-  } catch (error) {
-    // Fallback to text message if image fails
-    console.error('Failed to send expertise image:', error)
-    await ctx.reply(
-      `I am an expert on Remind People to Earn, so some people call me Bob the Honkor.
-
-How about you?`,
-      {
-        reply_markup: {
-          inline_keyboard: inlineKeyboard,
-        },
-      },
-    )
+    default:
+      await ctx.reply('Unknown step in onboarding flow')
   }
 }
 
 // Helper function to ask for user's name
-export async function askForName(ctx: OnboardingContext) {
+export async function askForName(ctx: DatabaseContext) {
   ctx.session.waitingForName = true
 
   try {
@@ -413,14 +102,268 @@ export async function askForName(ctx: OnboardingContext) {
 }
 
 // Helper function to handle name input
-export async function handleNameInput(ctx: OnboardingContext, name: string) {
-  ctx.session.userName = name.trim()
+export async function handleNameInput(ctx: DatabaseContext, name: string) {
+  const telegramId = ctx.from?.id?.toString()
+
+  if (!telegramId) return
+
+  // Ensure user exists in database
+  await ensureUserExists(ctx)
+
+  // Update user name in database
+  await ctx.updateUserData({
+    user: {
+      ...ctx.userData.user!,
+      userName: name.trim(),
+    },
+  })
+
   ctx.session.waitingForName = false
 
-  await ctx.reply(`Nice to meet you, ${ctx.session.userName}! 👋`)
+  await ctx.reply(`Nice to meet you, ${name.trim()}! 👋`)
 
   // If in onboarding flow, proceed to next step
   if (ctx.session.isOnboarding) {
     await proceedToNextOnboardingStep(ctx)
   }
+}
+
+// Helper function to show expertise selection
+export async function showExpertiseSelection(ctx: DatabaseContext) {
+  const allExpertise = Object.keys(EXPERTISE_GROUPS)
+  const userExpertise = ctx.userData.expertise || []
+
+  const inlineKeyboard = [
+    ...allExpertise.map((expertise) => {
+      const isSelected = userExpertise.includes(expertise)
+      const checkbox = isSelected ? '✅' : '☐'
+      return [
+        { text: expertise, callback_data: `toggle_${expertise}` },
+        { text: checkbox, callback_data: `toggle_${expertise}` },
+      ]
+    }),
+    [{ text: 'Done', callback_data: 'expertise_done' }],
+  ]
+
+  await ctx.replyWithPhoto(getImageUrl('/thumbnails/expertise.png'), {
+    caption: 'Select your expertise areas:',
+    reply_markup: {
+      inline_keyboard: inlineKeyboard,
+    },
+  })
+}
+
+// Helper function to show listing selection
+export async function showListingSelection(ctx: DatabaseContext) {
+  const listings = ['Bounties', 'Projects']
+  const userListings = ctx.userData.listings || []
+
+  const inlineKeyboard = [
+    ...listings.map((listing) => {
+      const isSelected = userListings.includes(listing)
+      const checkbox = isSelected ? '✅' : '☐'
+      return [
+        { text: `${listing}`, callback_data: `toggle_listing_${listing.toLowerCase()}` },
+        { text: `${checkbox}`, callback_data: `toggle_listing_${listing.toLowerCase()}` },
+      ]
+    }),
+    [{ text: 'Done', callback_data: 'listing_done' }],
+  ]
+
+  const caption = `Superteam Earn comes with Bounties and Projects,
+- *Bounties*: A list of tasks that you can complete to earn rewards.
+- *Projects*: Best fit if you are a freelance developer.
+
+Which one do you prefer?`
+
+  await ctx.replyWithPhoto(getImageUrl('/thumbnails/listing.png'), {
+    caption,
+    parse_mode: 'Markdown',
+    reply_markup: {
+      inline_keyboard: inlineKeyboard,
+    },
+  })
+}
+
+// Helper function to show USD range selection
+export async function showUSDRangeSelection(ctx: DatabaseContext) {
+  const inlineKeyboard = USD_RANGES.map((range) => [
+    {
+      text: `${range.label} ($${range.value.min} - $${range.value.max})`,
+      callback_data: `select_range_${range.value.min}_${range.value.max}`,
+    },
+  ])
+
+  await ctx.replyWithPhoto(getImageUrl('/thumbnails/range.png'), {
+    caption: 'Select your preferred USD range for bounties and projects:',
+    reply_markup: {
+      inline_keyboard: inlineKeyboard,
+    },
+  })
+}
+
+// Helper function to update expertise message
+export async function updateExpertiseMessage(ctx: DatabaseContext) {
+  const allExpertise = Object.keys(EXPERTISE_GROUPS)
+  const userExpertise = ctx.userData.expertise || []
+
+  const inlineKeyboard = [
+    ...allExpertise.map((expertise) => {
+      const isSelected = userExpertise.includes(expertise)
+      const checkbox = isSelected ? '✅' : '☐'
+      return [
+        { text: expertise, callback_data: `toggle_${expertise}` },
+        { text: checkbox, callback_data: `toggle_${expertise}` },
+      ]
+    }),
+    [{ text: 'Done', callback_data: 'expertise_done' }],
+  ]
+
+  try {
+    await ctx.editMessageCaption({
+      caption: 'Select your expertise areas:',
+      reply_markup: {
+        inline_keyboard: inlineKeyboard,
+      },
+    })
+  } catch (error) {
+    console.error('Failed to update expertise message:', error)
+  }
+}
+
+// Helper function to update listing message
+export async function updateListingMessage(ctx: DatabaseContext) {
+  const listings = ['Bounties', 'Projects']
+  const userListings = ctx.userData.listings || []
+
+  const inlineKeyboard = [
+    ...listings.map((listing) => {
+      const isSelected = userListings.includes(listing)
+      const checkbox = isSelected ? '✅' : '☐'
+      return [
+        { text: `${listing}`, callback_data: `toggle_listing_${listing.toLowerCase()}` },
+        { text: `${checkbox}`, callback_data: `toggle_listing_${listing.toLowerCase()}` },
+      ]
+    }),
+    [{ text: 'Done', callback_data: 'listing_done' }],
+  ]
+
+  const caption = `Superteam Earn comes with Bounties and Projects,
+- *Bounties*: A list of tasks that you can complete to earn rewards.
+- *Projects*: Best fit if you are a freelance developer.
+
+Which one do you prefer?`
+
+  try {
+    await ctx.editMessageCaption({
+      caption,
+      parse_mode: 'Markdown',
+      reply_markup: {
+        inline_keyboard: inlineKeyboard,
+      },
+    })
+  } catch (error) {
+    console.error('Failed to update listing message:', error)
+  }
+}
+
+// Helper function to update skills message
+export async function updateSkillsMessage(ctx: DatabaseContext) {
+  const userExpertise = ctx.userData.expertise || []
+  const userSkills = ctx.userData.skills || []
+
+  // Get all skills from selected expertise areas
+  const allAvailableSkills: string[] = []
+  userExpertise.forEach((expertise) => {
+    const skillsForExpertise = SKILLS[expertise as keyof typeof SKILLS]
+    if (skillsForExpertise) {
+      allAvailableSkills.push(...skillsForExpertise)
+    }
+  })
+
+  const uniqueSkills = [...new Set(allAvailableSkills)]
+
+  const inlineKeyboard = [
+    ...uniqueSkills.map((skill) => {
+      const isSelected = userSkills.includes(skill)
+      const checkbox = isSelected ? '✅' : '☐'
+      return [
+        { text: skill, callback_data: `toggle_skill_${skill}` },
+        { text: checkbox, callback_data: `toggle_skill_${skill}` },
+      ]
+    }),
+    [{ text: 'Done', callback_data: 'skills_done' }],
+  ]
+
+  try {
+    await ctx.editMessageCaption({
+      caption: 'Select your specific skills:',
+      reply_markup: {
+        inline_keyboard: inlineKeyboard,
+      },
+    })
+  } catch (error) {
+    console.error('Failed to update skills message:', error)
+  }
+}
+
+// Helper function to update skills based on expertise selection
+export async function updateSkillBasedOnExpertise(ctx: DatabaseContext, expertise: string) {
+  const userExpertise = ctx.userData.expertise || []
+
+  // Rebuild the entire skills list based on all selected expertise
+  const allSkills: string[] = []
+
+  userExpertise.forEach((selectedExpertise) => {
+    const skills = SKILLS[selectedExpertise as keyof typeof SKILLS]
+    if (skills) {
+      allSkills.push(...skills)
+    }
+  })
+
+  // Remove duplicates and update the database
+  const uniqueSkills = [...new Set(allSkills)]
+  await ctx.updateUserData({ skills: uniqueSkills })
+}
+
+// Helper function to check prerequisites for a command
+export function checkPrerequisites(ctx: DatabaseContext, command: string): string[] {
+  const missing: string[] = []
+
+  switch (command) {
+    case 'expertise':
+      if (!ctx.userData.user || !ctx.userData.user.userName) {
+        missing.push('name')
+      }
+      break
+    case 'skills':
+      if (!ctx.userData.user || !ctx.userData.user.userName) {
+        missing.push('name')
+      }
+      if (!ctx.userData.expertise || ctx.userData.expertise.length === 0) {
+        missing.push('expertise')
+      }
+      break
+    case 'listing':
+      if (!ctx.userData.user || !ctx.userData.user.userName) {
+        missing.push('name')
+      }
+      if (!ctx.userData.expertise || ctx.userData.expertise.length === 0) {
+        missing.push('expertise')
+      }
+      break
+    case 'range':
+      if (!ctx.userData.user || !ctx.userData.user.userName) {
+        missing.push('name')
+      }
+      if (!ctx.userData.expertise || ctx.userData.expertise.length === 0) {
+        missing.push('expertise')
+      }
+      if (!ctx.userData.listings || ctx.userData.listings.length === 0) {
+        missing.push('listing')
+      }
+      break
+  }
+
+  return missing
 }
