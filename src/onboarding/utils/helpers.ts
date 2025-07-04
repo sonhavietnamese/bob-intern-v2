@@ -65,7 +65,9 @@ export async function proceedToNextOnboardingStep(ctx: DatabaseContext) {
   if (missing.length > 0 && missing[0]) {
     await proceedToStep(ctx, missing[0])
   } else {
-    await ctx.reply('🎉 Congratulations! Your onboarding is complete!')
+    await ctx.replyWithPhoto(getImageUrl('/thumbnails/done.png'), {
+      caption: `🎉 Congratulations! You are all set!\n\n I, Bob, will help you find the best opportunities for you.\nYou, ${ctx.userData.user?.userName}, promise to be a good boy and never never never ever mad at me, promise to complete any listing you get!\nDeal!\n\n_I will notify you every 6 hours from now on, you can lean back and have a sip!_`,
+    })
     ctx.session.isOnboarding = false
   }
 }
@@ -196,7 +198,7 @@ Which one do you prefer?`
 export async function showUSDRangeSelection(ctx: DatabaseContext) {
   const inlineKeyboard = USD_RANGES.map((range) => [
     {
-      text: `${range.label} ($${range.value.min} - $${range.value.max})`,
+      text: `${range.label} ($${Number(range.value.min).toLocaleString()} - $${Number(range.value.max).toLocaleString()})`,
       callback_data: `select_range_${range.value.min}_${range.value.max}`,
     },
   ])

@@ -179,7 +179,7 @@ async function handleListingDone(ctx: DatabaseContext) {
 
   try {
     await ctx.editMessageCaption({ reply_markup: { inline_keyboard: [] } })
-    await ctx.replyWithPhoto('https://bob-intern-cdn.vercel.app/listing.png', {
+    await ctx.replyWithPhoto(getImageUrl('/thumbnails/listing-response-001.png'), {
       caption: `Great! You prefer: ${userListings.join(', ')}`,
       reply_markup: {
         inline_keyboard: [],
@@ -190,7 +190,7 @@ async function handleListingDone(ctx: DatabaseContext) {
     await ctx.editMessageText(selectedListingsText, {
       reply_markup: { inline_keyboard: [] },
     })
-    await ctx.replyWithPhoto('https://bob-intern-cdn.vercel.app/listing.png', {
+    await ctx.replyWithPhoto(getImageUrl('/thumbnails/listing-response-001.png'), {
       caption: `Great! You prefer: ${userListings.join(', ')}`,
       reply_markup: {
         inline_keyboard: [],
@@ -234,19 +234,22 @@ async function handleRangeSelection(ctx: DatabaseContext, data: string) {
 
   try {
     await ctx.editMessageCaption({ reply_markup: { inline_keyboard: [] } })
-    await ctx.replyWithPhoto(getImageUrl('/thumbnails/range.png'), {
-      caption: `Perfect! You've selected ${range.label} ($${minAmount} - $${maxAmount})`,
+    await ctx.replyWithPhoto(getImageUrl('/thumbnails/range-response-001.png'), {
+      caption: `Perfect! You've selected ${range.label} ($${Number(minAmount).toLocaleString()} - $${Number(maxAmount).toLocaleString()})`,
       reply_markup: {
         inline_keyboard: [],
       },
     })
   } catch (error) {
     // Fallback to editing text if caption fails
-    await ctx.editMessageText(`Perfect! You've selected ${range.label} ($${minAmount} - $${maxAmount})`, {
-      reply_markup: { inline_keyboard: [] },
-    })
-    await ctx.replyWithPhoto(getImageUrl('/thumbnails/range.png'), {
-      caption: `Perfect! You've selected ${range.label} ($${minAmount} - $${maxAmount})`,
+    await ctx.editMessageText(
+      `Perfect! You've selected ${range.label} ($${Number(minAmount).toLocaleString()} - $${Number(maxAmount).toLocaleString()})`,
+      {
+        reply_markup: { inline_keyboard: [] },
+      },
+    )
+    await ctx.replyWithPhoto(getImageUrl('/thumbnails/range-response-001.png'), {
+      caption: `Perfect! You've selected ${range.label} ($${Number(minAmount).toLocaleString()} - $${Number(maxAmount).toLocaleString()})`,
       reply_markup: {
         inline_keyboard: [],
       },
