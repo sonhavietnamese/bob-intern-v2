@@ -65,8 +65,12 @@ export async function proceedToNextOnboardingStep(ctx: DatabaseContext) {
   if (missing.length > 0 && missing[0]) {
     await proceedToStep(ctx, missing[0])
   } else {
+    // \getImageUrl('/thumbnails/expertise-response-001.png')
     await ctx.replyWithPhoto(getImageUrl('/thumbnails/done.png'), {
       caption: `🎉 Congratulations! You are all set!\n\n I, Bob, will help you find the best opportunities for you.\nYou, ${ctx.userData.user?.userName}, promise to be a good boy and never never never ever mad at me, promise to complete any listing you get!\nDeal!\n\n_I will notify you every 6 hours from now on, you can lean back and have a sip!_`,
+      reply_markup: {
+        inline_keyboard: [],
+      },
     })
     ctx.session.isOnboarding = false
   }
