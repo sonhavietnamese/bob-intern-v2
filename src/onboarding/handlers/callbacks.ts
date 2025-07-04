@@ -12,6 +12,8 @@ import {
   showUSDRangeSelection,
 } from '@/onboarding/utils/helpers'
 import { getImageUrl } from '@/lib/url'
+import { dbService } from '@/database/services'
+import { TIMING_CONFIG } from '@/config'
 
 export async function handleDatabaseCallbackQuery(ctx: DatabaseContext) {
   if (!ctx.callbackQuery?.data) {
@@ -36,6 +38,10 @@ export async function handleDatabaseCallbackQuery(ctx: DatabaseContext) {
     await handleRangeSelection(ctx, data)
   } else if (data.startsWith('update_')) {
     await handleProfileUpdate(ctx, data)
+  } else if (data.startsWith('remind_me_')) {
+    await handleRemindMe(ctx, data)
+  } else if (data.startsWith('stop_reminder_')) {
+    await handleStopReminder(ctx, data)
   }
 
   await ctx.answerCallbackQuery()
@@ -280,5 +286,106 @@ async function handleProfileUpdate(ctx: DatabaseContext, data: string) {
       break
     default:
       await ctx.reply('Unknown update type')
+  }
+}
+
+async function handleRemindMe(ctx: DatabaseContext, data: string) {
+  try {
+    // Extract listing ID from callback data (format: remind_me_LISTING_ID)
+    const listingId = data.replace('remind_me_', '')
+
+    if (!listingId) {
+      await ctx.reply('❌ Invalid reminder request')
+      return
+    }
+
+    // Ensure user exists in database
+    const user = ctx.userData.user
+    if (!user) {
+      await ctx.reply('❌ User not found. Please start the bot first with /start')
+      return
+    }
+
+    // Check if listing exists in database
+    const listing = await dbService.getListingById(listingId)
+    if (!listing) {
+      await ctx.reply('❌ Listing not found or may have been removed')
+      return
+    }
+
+    // Check if listing is still active and not past deadline
+    const now = new Date()
+    if (!listing.isActive || listing.deadline < now) {
+      await ctx.reply('❌ This listing is no longer active or has passed its deadline')
+      return
+    }
+
+    // Check if reminder already exists
+    const reminderExists = await dbService.checkUserReminderExists(user.id, listingId)
+    if (reminderExists) {
+      await ctx.reply('✅ You already have a reminder set for this listing!')
+      return
+    }
+
+    // Create reminder with default interval from configuration
+    const reminder = await dbService.createUserReminder(user.id, listingId, TIMING_CONFIG.REMINDERS.DEFAULT_INTERVAL_HOURS)
+
+    if (reminder) {
+      await ctx.reply(
+        `🔔 Reminder set! I'll remind you about "${listing.title}" every ${TIMING_CONFIG.REMINDERS.DEFAULT_INTERVAL_HOURS} hours until the deadline.`,
+      )
+      console.log(`📝 Reminder created: ${user.userName} for listing ${listing.title}`)
+    } else {
+      await ctx.reply('❌ Failed to create reminder. Please try again later.')
+    }
+  } catch (error) {
+    console.error('Error handling remind me callback:', error)
+    await ctx.reply('❌ An error occurred while setting up your reminder. Please try again later.')
+  }
+}
+
+async function handleStopReminder(ctx: DatabaseContext, data: string) {
+  try {
+    // Extract listing ID from callback data (format: stop_reminder_LISTING_ID)
+    const listingId = data.replace('stop_reminder_', '')
+
+    if (!listingId) {
+      await ctx.reply('❌ Invalid reminder stop request')
+      return
+    }
+
+    // Ensure user exists in database
+    const user = ctx.userData.user
+    if (!user) {
+      await ctx.reply('❌ User not found. Please start the bot first with /start')
+      return
+    }
+
+    // Check if listing exists in database
+    const listing = await dbService.getListingById(listingId)
+    if (!listing) {
+      await ctx.reply('❌ Listing not found or may have been removed')
+      return
+    }
+
+    // Check if reminder exists
+    const reminderExists = await dbService.checkUserReminderExists(user.id, listingId)
+    if (!reminderExists) {
+      await ctx.reply('✅ No reminder found for this listing')
+      return
+    }
+
+    // Deactivate reminder
+    const deactivated = await dbService.deactivateReminder(user.id, listingId)
+
+    if (deactivated) {
+      await ctx.reply('✅ Reminder deactivated successfully')
+      console.log(`📝 Reminder deactivated: ${user.userName} for listing ${listing.title}`)
+    } else {
+      await ctx.reply('❌ Failed to deactivate reminder. Please try again later.')
+    }
+  } catch (error) {
+    console.error('Error handling stop reminder callback:', error)
+    await ctx.reply('❌ An error occurred while stopping your reminder. Please try again later.')
   }
 }

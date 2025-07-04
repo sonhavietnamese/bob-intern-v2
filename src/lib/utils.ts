@@ -2,8 +2,9 @@ import path from 'path'
 import fs from 'fs-extra'
 import nodeHtmlToImage from 'node-html-to-image'
 import { getBaseUrl } from './url'
-import { pantonRust, namecardDataURI, listingDataURI, lfe, tagBountyDataURI, bobHeadDataURI } from './preload'
+import { pantonRust, namecardDataURI, listingDataURI, lfe, tagBountyDataURI, bobHeadDataURI, tagProjectDataURI } from './preload'
 import { APP_CONFIG, IS_PRODUCTION } from '@/config'
+import { TIMING_CONFIG } from '@/config'
 
 export const leftAlignTextTelegram = (text: string, maxLength: number) => {
   const textLength = text.length
@@ -121,7 +122,7 @@ export const generateImage = async (options: ImageGenerationOptions): Promise<st
   }
 }
 
-export const cleanupOldImages = async (maxAge: number = 24 * 60 * 60 * 1000) => {
+export const cleanupOldImages = async (maxAge: number = TIMING_CONFIG.CLEANUP.IMAGE_MAX_AGE_MS) => {
   try {
     const imagesDir = path.join(process.cwd(), 'public', 'images')
     const files = await fs.readdir(imagesDir)
@@ -253,20 +254,31 @@ export const generateNameCard = async (name: string, userId: string) => {
   }
 }
 
-export const generateListingThumbnail = async (listing: string) => {
+export const generateListingThumbnail = async (
+  // slug: string,
+  // listing: string,
+  // deadline: string,
+  // amount: string,
+  // token: string,
+  // sponsor: string,
+  // type: string,
+  listing: any,
+) => {
   // TODO: find the existing listing thumbnail and return the path
   try {
-    // const thumbnailPath = path.join(process.cwd(), 'public', 'images', 'listings', `${listing}-thumbnail.png`)
-    // await fs.access(thumbnailPath) // Check if file exists without loading it into memory
-    // return `/images/listings/${listing}-thumbnail.png`
+    const thumbnailPath = path.join(process.cwd(), 'public', 'images', 'listings', `${listing.slug}-thumbnail.png`)
+    await fs.access(thumbnailPath) // Check if file exists without loading it into memory
+    return `/images/listings/${listing.slug}-thumbnail.png`
     throw new Error('Listing thumbnail not found')
   } catch {
     // File doesn't exist, continue to generate new thumbnail
 
-    const deadline = '17 JUN 2025 00:00 UTC'
-    const amount = '2000'
-    const token = 'USDC'
-    const sponsor = 'Kumeka Team'
+    // const deadline = '17 JUN 2025 00:00 UTC'
+    // const amount = '2000'
+    // const token = 'USDC'
+    // const sponsor = 'Kumeka Team'
+
+    const sponsor = JSON.parse(listing.sponsor)
 
     const html = `
   <!DOCTYPE html>
@@ -385,16 +397,28 @@ export const generateListingThumbnail = async (listing: string) => {
       </div>
 
       <div class="title">
-        <span class="title-content">${listing}</span>
-        <span class="sponsor">By <i class="sponsor-name">${sponsor}</i></span>
+        <span class="title-content">${listing.title}</span>
+        <span class="sponsor">By <i class="sponsor-name">${sponsor.name}</i></span>
       </div>
 
       <div class="deadline">
-        <span class="deadline-content">${deadline}</span>
+        <span class="deadline-content">${new Date(listing.deadline)
+          .toLocaleString('en-US', {
+            weekday: 'short',
+            month: 'short',
+            day: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            timeZone: 'UTC',
+            hour12: false,
+          })
+          .replace(',', ' ')
+          .toUpperCase()} UTC</span>
       </div>
  
       <div class="amount">
-        <span class="amount-content">$${amount} ${token}</span>
+        <span class="amount-content">$${listing.usdValue} ${listing.token}</span>
       </div>
    </body>
   </html>
@@ -403,7 +427,7 @@ export const generateListingThumbnail = async (listing: string) => {
     try {
       // Generate unique filename
       // const timestamp = Date.now()
-      const filename = `${listing}-thumbnail.png`
+      const filename = `${listing.slug}-thumbnail.png`
       const filePath = path.join(process.cwd(), 'public', 'images', 'listings', filename)
 
       // Ensure directory exists
@@ -416,7 +440,7 @@ export const generateListingThumbnail = async (listing: string) => {
           listingDataURI,
           pantonRust,
           lfe,
-          tag: tagBountyDataURI,
+          tag: listing.type === 'bounty' ? tagBountyDataURI : tagProjectDataURI,
           decor: bobHeadDataURI,
         },
         // puppeteerArgs: {

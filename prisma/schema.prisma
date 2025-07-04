@@ -30,6 +30,11 @@ model User {
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
 
+  // Relations
+  listingMatches  UserListingMatch[]
+  notifications   UserNotification[]
+  reminders       UserReminder[]
+
   @@map("users")
 }
 
@@ -57,5 +62,61 @@ model Listing {
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
 
+  // Relations
+  userMatches       UserListingMatch[]
+  notifications     UserNotification[]
+  reminders         UserReminder[]
+
   @@map("listings")
+}
+
+model UserListingMatch {
+  id          Int      @id @default(autoincrement())
+  userId      Int      @map("user_id")
+  listingId   String   @map("listing_id")
+  matchScore  Int      @default(1) @map("match_score") // How many skills matched
+  isActive    Boolean  @default(true) @map("is_active")
+  
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listing     Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, listingId])
+  @@map("user_listing_matches")
+}
+
+model UserNotification {
+  id          Int      @id @default(autoincrement())
+  userId      Int      @map("user_id")
+  listingId   String   @map("listing_id")
+  messageType String   @default("skill_match") @map("message_type") // 'skill_match', 'reminder', etc.
+  sentAt      DateTime @default(now()) @map("sent_at")
+  
+  // Relations
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listing     Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@map("user_notifications")
+}
+
+model UserReminder {
+  id              Int      @id @default(autoincrement())
+  userId          Int      @map("user_id")
+  listingId       String   @map("listing_id")
+  intervalHours   Int      @default(6) @map("interval_hours") // Reminder interval in hours
+  lastRemindedAt  DateTime? @map("last_reminded_at") // When was the last reminder sent
+  isActive        Boolean  @default(true) @map("is_active")
+  
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listing         Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, listingId])
+  @@map("user_reminders")
 } 

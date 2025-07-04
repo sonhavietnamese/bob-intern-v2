@@ -15,6 +15,7 @@ import { generateImage } from './lib/utils'
 import { databaseCommands, databaseComposer } from './onboarding/composer'
 import type { DatabaseContext } from './onboarding/types'
 import { CronjobService } from './services/cronjob'
+import { TIMING_CONFIG } from './config'
 
 export const {
   TELEGRAM_BOT_TOKEN: token,
@@ -113,7 +114,7 @@ server.get('/api/queue-status', async (request, reply) => {
         queueSize: status.queueSize,
         isProcessing: status.isProcessing,
         nextScheduledMessage: status.nextScheduledMessage,
-        estimatedTimeToComplete: status.queueSize > 0 ? Math.ceil(status.queueSize / 25) : 0, // seconds
+        estimatedTimeToComplete: status.queueSize > 0 ? Math.ceil(status.queueSize / TIMING_CONFIG.MESSAGE_QUEUE.ESTIMATED_MESSAGES_PER_SECOND) : 0, // seconds
       },
     })
   } catch (error) {
@@ -203,6 +204,192 @@ server.get('/api/listings/recent', async (request, reply) => {
   }
 })
 
+server.get('/api/matching-stats', async (request, reply) => {
+  try {
+    const stats = await dbService.getMatchingStats()
+    reply.send({
+      success: true,
+      data: stats,
+    })
+  } catch (error) {
+    console.error('Error getting matching stats:', error)
+    reply.status(500).send({
+      success: false,
+      error: 'Failed to get matching stats',
+    })
+  }
+})
+
+server.post('/api/test-skill-matching', async (request, reply) => {
+  try {
+    await cronjobService.processSkillMatchingCronjob()
+    const stats = await dbService.getMatchingStats()
+    reply.send({
+      success: true,
+      message: 'Skill matching process completed successfully',
+      stats,
+    })
+  } catch (error) {
+    console.error('Error in test skill matching:', error)
+    reply.status(500).send({
+      success: false,
+      error: 'Failed to process skill matching',
+    })
+  }
+})
+
+server.get('/api/recent-matches', async (request, reply) => {
+  try {
+    const matches = await dbService.getActiveUserListingMatches()
+    const formattedMatches = matches.slice(0, 10).map((match) => ({
+      id: match.id,
+      userId: match.userId,
+      userName: match.user.userName,
+      listingId: match.listingId,
+      listingTitle: match.listing.title,
+      listingType: match.listing.type,
+      matchScore: match.matchScore,
+      createdAt: match.createdAt,
+    }))
+
+    reply.send({
+      success: true,
+      data: formattedMatches,
+    })
+  } catch (error) {
+    console.error('Error getting recent matches:', error)
+    reply.status(500).send({
+      success: false,
+      error: 'Failed to get recent matches',
+    })
+  }
+})
+
+server.post('/api/clean-duplicates', async (request, reply) => {
+  try {
+    const deletedCount = await dbService.removeDuplicateMatches()
+    reply.send({
+      success: true,
+      message: `Cleaned up ${deletedCount} duplicate matches`,
+      deletedCount,
+    })
+  } catch (error) {
+    console.error('Error cleaning duplicates:', error)
+    reply.status(500).send({
+      success: false,
+      error: 'Failed to clean duplicates',
+    })
+  }
+})
+
+server.post('/api/clear-notifications', async (request, reply) => {
+  try {
+    // Clear all notifications to test fresh sends
+    const result = await dbService.clearAllNotifications()
+    reply.send({
+      success: true,
+      message: `Cleared ${result} notifications for testing`,
+      clearedCount: result,
+    })
+  } catch (error) {
+    console.error('Error clearing notifications:', error)
+    reply.status(500).send({
+      success: false,
+      error: 'Failed to clear notifications',
+    })
+  }
+})
+
+// Reminder API endpoints
+server.get('/api/reminder-stats', async (request, reply) => {
+  try {
+    const stats = await dbService.getReminderStats()
+    reply.send({
+      success: true,
+      data: stats,
+    })
+  } catch (error) {
+    console.error('Error getting reminder stats:', error)
+    reply.status(500).send({
+      success: false,
+      error: 'Failed to get reminder stats',
+    })
+  }
+})
+
+server.get('/api/active-reminders', async (request, reply) => {
+  try {
+    const reminders = await dbService.getActiveReminders()
+    const formattedReminders = reminders.slice(0, 10).map((reminder) => ({
+      id: reminder.id,
+      userId: reminder.userId,
+      userName: reminder.user.userName,
+      listingId: reminder.listingId,
+      listingTitle: reminder.listing.title,
+      listingType: reminder.listing.type,
+      intervalHours: reminder.intervalHours,
+      lastRemindedAt: reminder.lastRemindedAt,
+      createdAt: reminder.createdAt,
+    }))
+
+    reply.send({
+      success: true,
+      data: formattedReminders,
+    })
+  } catch (error) {
+    console.error('Error getting active reminders:', error)
+    reply.status(500).send({
+      success: false,
+      error: 'Failed to get active reminders',
+    })
+  }
+})
+
+server.post('/api/test-reminders', async (request, reply) => {
+  try {
+    await cronjobService.sendReminders()
+    const stats = await dbService.getReminderStats()
+    reply.send({
+      success: true,
+      message: 'Reminder sending process completed successfully',
+      stats,
+    })
+  } catch (error) {
+    console.error('Error in test reminders:', error)
+    reply.status(500).send({
+      success: false,
+      error: 'Failed to process reminders',
+    })
+  }
+})
+
+server.get('/api/reminders-ready', async (request, reply) => {
+  try {
+    const readyReminders = await dbService.getRemindersReadyToSend()
+    const formattedReminders = readyReminders.map((reminder) => ({
+      id: reminder.id,
+      userId: reminder.userId,
+      userName: reminder.user.userName,
+      listingId: reminder.listingId,
+      listingTitle: reminder.listing.title,
+      intervalHours: reminder.intervalHours,
+      lastRemindedAt: reminder.lastRemindedAt,
+      timeSinceLastReminder: reminder.lastRemindedAt ? Math.round((Date.now() - reminder.lastRemindedAt.getTime()) / (1000 * 60 * 60)) : null,
+    }))
+
+    reply.send({
+      success: true,
+      data: formattedReminders,
+    })
+  } catch (error) {
+    console.error('Error getting ready reminders:', error)
+    reply.status(500).send({
+      success: false,
+      error: 'Failed to get ready reminders',
+    })
+  }
+})
+
 server.post(`/${token}`, webhookCallback(bot, 'fastify', { secretToken: secretToken }))
 
 server.setErrorHandler(async (error) => {
@@ -246,20 +433,31 @@ server.listen({ port: +PORT, host: '0.0.0.0' }, async (error) => {
 
   if (isProduction) {
     console.log('⏳ Waiting for Railway service to be fully accessible...')
-    await new Promise((resolve) => setTimeout(resolve, 5000)) // Wait 5 seconds
+    await new Promise((resolve) => setTimeout(resolve, TIMING_CONFIG.WEBHOOK.PRODUCTION_STARTUP_DELAY_MS))
   }
 
   await setupWebhookWithRetry(webhookUrl, secretToken)
 
-  // Set up cronjob to scan bounties and projects every 5 minutes
-  cron.schedule('*/2 * * * *', () => cronjobService.scanBountiesAndProjects(), {
+  // Set up cronjob to scan bounties and projects
+  cron.schedule(TIMING_CONFIG.CRONJOBS.LISTINGS_SCAN, () => cronjobService.scanBountiesAndProjects(), {
     timezone: 'UTC',
   })
 
-  console.log('⏰ Cronjob scheduled: Bounties and projects will be scanned every 5 minutes')
+  // Set up skill matching cronjob: notifications and reminders
+  cron.schedule(TIMING_CONFIG.CRONJOBS.NOTIFICATIONS, () => cronjobService.processSkillMatchingCronjob(), {
+    timezone: 'UTC',
+  })
+
+  console.log(`⏰ Cronjob scheduled: Bounties and projects will be scanned on schedule: ${TIMING_CONFIG.CRONJOBS.LISTINGS_SCAN}`)
+  console.log(`⏰ Skill matching cronjob scheduled: ${TIMING_CONFIG.ENVIRONMENT_DIFFERENCES.NOTIFICATION_FREQUENCY}`)
 })
 
-async function setupWebhookWithRetry(webhookUrl: string, secretToken: string, maxRetries = 3, delayMs = 10000) {
+async function setupWebhookWithRetry(
+  webhookUrl: string,
+  secretToken: string,
+  maxRetries = TIMING_CONFIG.WEBHOOK.MAX_RETRIES,
+  delayMs = TIMING_CONFIG.WEBHOOK.RETRY_DELAY_MS,
+) {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       console.log(`🔄 Setting webhook (attempt ${attempt}/${maxRetries}): ${webhookUrl}/${token}`)

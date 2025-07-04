@@ -1,5 +1,6 @@
 import { Bot } from 'grammy'
 import type { Context } from 'grammy'
+import { TIMING_CONFIG } from '@/config'
 
 export interface QueuedMessage {
   id: string
@@ -20,10 +21,10 @@ export class MessageQueue<C extends Context = Context> {
   private queue: QueuedMessage[] = []
   private isProcessing = false
   private bot: Bot<C>
-  private readonly RATE_LIMIT = 30 // messages per second
-  private readonly BATCH_SIZE = 25 // slightly less than rate limit for safety
-  private readonly RETRY_DELAY = 5000 // 5 seconds
-  private readonly MAX_RETRIES = 3
+  private readonly RATE_LIMIT = TIMING_CONFIG.MESSAGE_QUEUE.RATE_LIMIT_PER_SECOND
+  private readonly BATCH_SIZE = TIMING_CONFIG.MESSAGE_QUEUE.BATCH_SIZE
+  private readonly RETRY_DELAY = TIMING_CONFIG.MESSAGE_QUEUE.RETRY_DELAY_MS
+  private readonly MAX_RETRIES = TIMING_CONFIG.MESSAGE_QUEUE.MAX_RETRIES
 
   constructor(bot: Bot<C>) {
     this.bot = bot
@@ -84,9 +85,9 @@ export class MessageQueue<C extends Context = Context> {
       while (this.queue.length > 0) {
         await this.processBatch()
 
-        // Wait 1 second between batches to respect rate limits
+        // Wait between batches to respect rate limits
         if (this.queue.length > 0) {
-          await this.sleep(1000)
+          await this.sleep(TIMING_CONFIG.MESSAGE_QUEUE.BATCH_PROCESSING_DELAY_MS)
         }
       }
     } catch (error) {

@@ -32,10 +32,6 @@ export const CDN_URLS = {
 } as const
 
 export const APP_CONFIG = {
-  IMAGE_CLEANUP_MAX_AGE: 24 * 60 * 60 * 1000,
-  WEBHOOK_RETRY_ATTEMPTS: 3,
-  WEBHOOK_RETRY_DELAY: 10000,
-  PRODUCTION_STARTUP_DELAY: 5000,
   PUPPETEER_ARGS: {
     executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/google-chrome-stable',
     args: [
@@ -49,6 +45,76 @@ export const APP_CONFIG = {
       '--disable-gpu',
     ],
   } as any,
+} as const
+
+export const TIMING_CONFIG = {
+  CRONJOBS: {
+    // Scan Superteam listings for new bounties/projects
+    LISTINGS_SCAN: IS_DEVELOPMENT ? '*/2 * * * *' : '0 */2 * * *', // Every 2 minutes (dev) vs every 2 hours (prod)
+
+    // Process skill matching and send notifications/reminders
+    NOTIFICATIONS: IS_DEVELOPMENT ? '*/1 * * * *' : '6 * * * *', // Every 1 minute (dev) vs every 6 hours (prod)
+  },
+
+  // Reminder intervals
+  REMINDERS: {
+    // Default reminder interval when user clicks "Remind me"
+    DEFAULT_INTERVAL_HOURS: 6,
+
+    // Test message reminder interval
+    TEST_MESSAGE_INTERVAL_HOURS: 12,
+
+    // How long to look back for recent notifications to prevent duplicates
+    RECENT_NOTIFICATION_CUTOFF_MS: IS_PRODUCTION ? 6 * 60 * 60 * 1000 : 30 * 1000, // 6 hours (prod) vs 30 seconds (dev)
+  },
+
+  // Message queue and rate limiting
+  MESSAGE_QUEUE: {
+    // Telegram API rate limits
+    RATE_LIMIT_PER_SECOND: 30,
+    BATCH_SIZE: 25, // Slightly less than rate limit for safety
+
+    // Retry configuration
+    RETRY_DELAY_MS: 5000, // 5 seconds
+    MAX_RETRIES: 3,
+
+    // Delay between processing batches
+    BATCH_PROCESSING_DELAY_MS: 1000, // 1 second
+
+    // Rate limiting calculation for UI estimates
+    ESTIMATED_MESSAGES_PER_SECOND: 25,
+  },
+
+  // API and network delays
+  API: {
+    // Delay between API batches when fetching listing details
+    BATCH_DELAY_MS: 1000, // 1 second
+
+    // Superteam API batch size for fetching details
+    LISTING_BATCH_SIZE: 10,
+  },
+
+  // Webhook and startup timing
+  WEBHOOK: {
+    // Retry configuration for webhook setup
+    RETRY_DELAY_MS: 10000, // 10 seconds
+    MAX_RETRIES: 3,
+
+    // Wait time for Railway service to be accessible
+    PRODUCTION_STARTUP_DELAY_MS: 5000, // 5 seconds
+  },
+
+  // Image and file cleanup
+  CLEANUP: {
+    // Maximum age for generated images before cleanup
+    IMAGE_MAX_AGE_MS: 24 * 60 * 60 * 1000, // 24 hours
+  },
+
+  // Development vs Production differences summary
+  ENVIRONMENT_DIFFERENCES: {
+    NOTIFICATION_FREQUENCY: IS_DEVELOPMENT ? 'Every 1 minute' : 'Every 1 hour',
+    NOTIFICATION_CUTOFF: IS_DEVELOPMENT ? '30 seconds' : '1 hour',
+  },
 } as const
 
 export const EXPERTISE_GROUPS = {
