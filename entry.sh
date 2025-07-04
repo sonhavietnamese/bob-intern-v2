@@ -5,6 +5,8 @@ set -e
 
 echo "Starting application setup..."
 
+
+
 # Run database migrations
 echo "Running database migrations..."
 pnpm run db:push

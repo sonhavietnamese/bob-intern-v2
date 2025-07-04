@@ -20,17 +20,6 @@ export const ENV = {
 export const IS_DEVELOPMENT = ENV.NODE_ENV === 'development'
 export const IS_PRODUCTION = ENV.NODE_ENV === 'production'
 
-export const CDN_URLS = {
-  BASE: 'https://bob-intern-cdn.vercel.app',
-  IMAGES: {
-    WELCOME: 'https://bob-intern-cdn.vercel.app/welcome.png',
-    EXPERTISE: 'https://bob-intern-cdn.vercel.app/expertise.png',
-    SKILLS: 'https://bob-intern-cdn.vercel.app/skills.png',
-    LISTING: 'https://bob-intern-cdn.vercel.app/listing.png',
-    RANGE: 'https://bob-intern-cdn.vercel.app/range.png',
-  },
-} as const
-
 export const APP_CONFIG = {
   PUPPETEER_ARGS: {
     executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/google-chrome-stable',
